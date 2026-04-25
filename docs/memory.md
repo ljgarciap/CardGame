@@ -13,3 +13,4 @@
 - **Domain Entities**: Updated `CardEntity` and created `CardPackEntity` in `frontend/`.
 - **Marketplace UI**: Created `MarketplacePage` with a grid of packs, prices, and level-based styling.
 - **Pack Opening System**: Implemented `PackOpeningPage` with floating animations, dramatic opening sequence, and card reveal logic.
+- **Git Repository**: Initialized Git monorepo with a comprehensive global `.gitignore`.
