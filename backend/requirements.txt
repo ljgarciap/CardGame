@@ -1,8 +1,16 @@
 fastapi
 uvicorn[standard]
 sqlalchemy
+alembic
 psycopg2-binary
 pydantic
 pydantic-settings
+email-validator
 python-dotenv
 websockets
+bcrypt
+python-jose[cryptography]
+aiosmtplib
+pytest
+pytest-asyncio
+httpx

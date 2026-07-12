@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'marketplace_page.dart';
+import 'profile_page.dart';
 
 class MainMenuPage extends StatelessWidget {
   const MainMenuPage({super.key});
@@ -24,7 +25,21 @@ class MainMenuPage extends StatelessWidget {
           ),
         ),
         child: SafeArea(
-          child: Column(
+          child: Stack(
+            children: [
+              Positioned(
+                top: 10,
+                right: 10,
+                child: IconButton(
+                  icon: const FaIcon(FontAwesomeIcons.solidUser, color: Colors.white54),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (context) => const ProfilePage()),
+                    );
+                  },
+                ),
+              ),
+              Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Spacer(),
@@ -103,6 +118,8 @@ class MainMenuPage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 20),
+                ],
+              ),
             ],
           ),
         ),

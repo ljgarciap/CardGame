@@ -11,6 +11,13 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
 
+  mailhog:
+    image: mailhog/mailhog
+    restart: always
+    ports:
+      - "8025:8025" # web UI para inspeccionar correos en dev
+      - "1025:1025" # SMTP
+
   backend:
     build: ./backend
     restart: always
@@ -18,8 +25,13 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://user:password@db:5432/card_game
+      - JWT_SECRET_KEY=dev-secret-change-in-production
+      - SMTP_HOST=mailhog
+      - SMTP_PORT=1025
+      - SMTP_FROM=noreply@cardgame.local
     depends_on:
       - db
+      - mailhog
 
 volumes:
   db_data:
