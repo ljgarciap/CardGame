@@ -145,6 +145,12 @@ def test_update_rank_probabilities_rejects_negative_value_even_if_sum_is_valid(c
     )
 
     assert response.status_code == 400
+    # El mensaje debe ser legible ("hero: -0.2"), no la repr() de Python del
+    # enum/Decimal ("{<Rank.hero: 'hero'>: Decimal('-0.2')}").
+    detail = response.json()["detail"]
+    assert "hero: -0.2" in detail
+    assert "Rank." not in detail
+    assert "Decimal(" not in detail
 
 
 def test_update_rarity_probabilities_rejects_invalid_sum(client, db_session):

@@ -47,9 +47,13 @@ def _get_pack_level_or_404(db: Session, level: int) -> GachaPackLevel:
 def _validate_non_negative(values: dict) -> None:
     negative = {k: v for k, v in values.items() if v < 0}
     if negative:
+        # k.value/str(v) en vez de dejar que el f-string use repr() del dict
+        # -> antes el detail devuelto al cliente era literalmente
+        # "{<Rank.hero: 'hero'>: Decimal('-0.2')}", no un mensaje legible.
+        readable = ", ".join(f"{k.value}: {v}" for k, v in negative.items())
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"los valores no pueden ser negativos: {negative}",
+            detail=f"los valores no pueden ser negativos: {readable}",
         )
 
 
