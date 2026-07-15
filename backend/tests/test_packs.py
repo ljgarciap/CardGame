@@ -34,6 +34,28 @@ def test_open_pack_without_token_is_rejected(client):
     assert response.status_code == 401
 
 
+def test_list_pack_levels_without_token_is_rejected(client):
+    response = client.get("/api/packs/levels")
+    assert response.status_code == 401
+
+
+def test_list_pack_levels_returns_real_config_for_any_authenticated_user(client, db_session):
+    seed_gacha_config(db_session)
+    user = _create_user(db_session)
+
+    response = client.get("/api/packs/levels", headers=_auth_header(user))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 5
+    level_1 = next(item for item in body if item["level"] == 1)
+    assert level_1["price"] == 1000
+    assert level_1["cards_per_pack"] == 5
+    assert level_1["guaranteed_min_rank"] is None
+    level_3 = next(item for item in body if item["level"] == 3)
+    assert level_3["guaranteed_min_rank"] == "demigod"
+
+
 def test_open_pack_with_invalid_level_is_rejected(client, db_session):
     seed_archetypes(db_session)
     seed_gacha_config(db_session)

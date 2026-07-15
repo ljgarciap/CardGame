@@ -7,6 +7,7 @@ from app.db.session import get_db
 from app.models.gacha_config import GachaPackLevel
 from app.models.player_card import PlayerCard
 from app.models.user import User
+from app.schemas.gacha_config import PackLevelOut
 from app.schemas.pack import CardOut, PackOpenRequest, PackOpenResponse
 from app.services.gacha_service import (
     MAX_LEVEL,
@@ -16,6 +17,23 @@ from app.services.gacha_service import (
 )
 
 router = APIRouter(prefix="/api/packs", tags=["packs"])
+
+
+@router.get("/levels", response_model=list[PackLevelOut])
+def list_pack_levels(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Público para cualquier usuario autenticado (no solo superadmin) — el
+    Marketplace lo usa para mostrar precio/nivel reales en vez de valores
+    hardcodeados en el cliente que podrían desincronizarse del admin CRUD.
+    No es sensible: precio/cantidad de cartas no son secretos, y el spec de
+    juego (docs/specs/game-gacha-engine.md) exige explícitamente que las
+    probabilidades de gacha nunca se oculten al jugador."""
+    pack_levels = db.execute(
+        select(GachaPackLevel).order_by(GachaPackLevel.level)
+    ).scalars().all()
+    return pack_levels
 
 
 @router.post("/open", response_model=PackOpenResponse)

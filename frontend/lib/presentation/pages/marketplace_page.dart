@@ -1,25 +1,51 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import '../../domain/entities/pack.dart';
-import '../../domain/entities/card.dart';
+
+import '../../core/errors/api_exception.dart';
+import '../../domain/entities/gacha_config.dart';
+import '../providers/pack_provider.dart';
 import 'pack_opening_page.dart';
 
-class MarketplacePage extends StatelessWidget {
+/// Nombres de sobre puramente decorativos — no es un valor de negocio (no
+/// afecta precio/probabilidades/economía), así que vive como texto local en
+/// vez de en la tabla paramétrica del backend.
+const Map<int, String> _packDisplayNames = {
+  1: 'Mortal Pack',
+  2: 'Heroic Pack',
+  3: 'Divine Pack',
+  4: 'Titan Pack',
+  5: 'Godly Pack',
+};
+
+class MarketplacePage extends ConsumerStatefulWidget {
   const MarketplacePage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final packs = [
-      CardPackEntity(id: '1', name: 'Mortal Pack', level: PackLevel.level1()),
-      CardPackEntity(id: '2', name: 'Heroic Pack', level: PackLevel(
-        level: 2, 
-        rankProbabilities: {CardRank.hero: 0.60, CardRank.demigod: 0.30, CardRank.minorGod: 0.08, CardRank.majorGod: 0.02},
-        rarityProbabilities: {CardRarity.common: 0.70, CardRarity.rare: 0.20, CardRarity.epic: 0.08, CardRarity.legendary: 0.02},
-      )),
-      CardPackEntity(id: '5', name: 'Godly Pack', level: PackLevel.level5()),
-    ];
+  ConsumerState<MarketplacePage> createState() => _MarketplacePageState();
+}
 
+class _MarketplacePageState extends ConsumerState<MarketplacePage> {
+  late Future<List<GachaPackLevelConfig>> _levelsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLevels();
+  }
+
+  void _loadLevels() {
+    _levelsFuture = ref.read(packRepositoryProvider).getPackLevels();
+  }
+
+  Future<void> _reload() async {
+    setState(_loadLevels);
+    await _levelsFuture;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
@@ -35,36 +61,72 @@ class MarketplacePage extends StatelessWidget {
             colors: [Color(0xFF0D47A1), Color(0xFF000000)],
           ),
         ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 100, 20, 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'FEATURED PACKS',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.5),
-                  letterSpacing: 2,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
-              ).animate().fadeIn().slideX(),
-              const SizedBox(height: 20),
-              Expanded(
-                child: GridView.builder(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    childAspectRatio: 0.7,
-                    crossAxisSpacing: 20,
-                    mainAxisSpacing: 20,
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'FEATURED PACKS',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.5),
+                    letterSpacing: 2,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
                   ),
-                  itemCount: packs.length,
-                  itemBuilder: (context, index) {
-                    return _PackCard(pack: packs[index]).animate(delay: (index * 100).ms).scale().fadeIn();
-                  },
+                ).animate().fadeIn().slideX(),
+                const SizedBox(height: 20),
+                Expanded(
+                  child: FutureBuilder<List<GachaPackLevelConfig>>(
+                    future: _levelsFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState != ConnectionState.done) {
+                        return const Center(
+                          child: CircularProgressIndicator(color: Colors.amber),
+                        );
+                      }
+                      if (snapshot.hasError) {
+                        final message = snapshot.error is ApiException
+                            ? (snapshot.error as ApiException).message
+                            : 'No se pudieron cargar los sobres.';
+                        return Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                message,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Colors.redAccent),
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton(onPressed: _reload, child: const Text('Reintentar')),
+                            ],
+                          ),
+                        );
+                      }
+
+                      final levels = snapshot.data!;
+                      return GridView.builder(
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          childAspectRatio: 0.7,
+                          crossAxisSpacing: 20,
+                          mainAxisSpacing: 20,
+                        ),
+                        itemCount: levels.length,
+                        itemBuilder: (context, index) {
+                          return _PackCard(level: levels[index])
+                              .animate(delay: (index * 100).ms)
+                              .scale()
+                              .fadeIn();
+                        },
+                      );
+                    },
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -73,18 +135,19 @@ class MarketplacePage extends StatelessWidget {
 }
 
 class _PackCard extends StatelessWidget {
-  final CardPackEntity pack;
+  final GachaPackLevelConfig level;
 
-  const _PackCard({required this.pack});
+  const _PackCard({required this.level});
 
   @override
   Widget build(BuildContext context) {
-    final color = _getPackColor(pack.level.level);
+    final color = _getPackColor(level.level);
+    final name = _packDisplayNames[level.level] ?? 'Level ${level.level} Pack';
 
     return GestureDetector(
       onTap: () {
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (context) => PackOpeningPage(pack: pack)),
+          MaterialPageRoute(builder: (context) => PackOpeningPage(level: level.level)),
         );
       },
       child: Container(
@@ -119,7 +182,7 @@ class _PackCard extends StatelessWidget {
                   color: color,
                 ).animate(onPlay: (controller) => controller.repeat(reverse: true))
                   .shimmer(duration: 2.seconds, color: Colors.white.withOpacity(0.5)),
-                if (pack.level.level == 5)
+                if (level.level == 5)
                   const Positioned(
                     top: 0,
                     right: 0,
@@ -129,7 +192,7 @@ class _PackCard extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             Text(
-              pack.name.toUpperCase(),
+              name.toUpperCase(),
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
@@ -139,7 +202,7 @@ class _PackCard extends StatelessWidget {
             ),
             const SizedBox(height: 5),
             Text(
-              'LEVEL ${pack.level.level}',
+              'LEVEL ${level.level} · ${level.cardsPerPack} CARDS',
               style: TextStyle(
                 color: color,
                 fontWeight: FontWeight.bold,
@@ -159,7 +222,7 @@ class _PackCard extends StatelessWidget {
                   const FaIcon(FontAwesomeIcons.coins, size: 14, color: Colors.amber),
                   const SizedBox(width: 8),
                   Text(
-                    '${pack.level.level * 1000}',
+                    '${level.price}',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ],

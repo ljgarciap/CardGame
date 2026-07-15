@@ -7,14 +7,13 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../../core/errors/api_exception.dart';
 import '../../domain/entities/card.dart';
-import '../../domain/entities/pack.dart';
 import '../providers/auth_provider.dart';
 import '../providers/pack_provider.dart';
 
 class PackOpeningPage extends ConsumerStatefulWidget {
-  final CardPackEntity pack;
+  final int level;
 
-  const PackOpeningPage({super.key, required this.pack});
+  const PackOpeningPage({super.key, required this.level});
 
   @override
   ConsumerState<PackOpeningPage> createState() => _PackOpeningPageState();
@@ -35,7 +34,7 @@ class _PackOpeningPageState extends ConsumerState<PackOpeningPage> {
     try {
       final result = await ref
           .read(packRepositoryProvider)
-          .openPack(level: widget.pack.level.level);
+          .openPack(level: widget.level);
       setState(() {
         _revealedCards = result.cards;
         _isOpened = true;

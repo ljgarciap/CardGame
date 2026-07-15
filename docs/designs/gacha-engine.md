@@ -66,6 +66,28 @@ descuenta al abrir un sobre — no se agrega columna nueva.
 ## Contrato de API
 
 ```
+GET /api/packs/levels
+Headers: Authorization: Bearer <jwt>        -- cualquier usuario autenticado, no solo superadmin
+
+200 OK:
+[
+  { "level": 1, "price": 1000, "cards_per_pack": 5, "guaranteed_min_rank": null },
+  { "level": 3, "price": 3000, "cards_per_pack": 5, "guaranteed_min_rank": "demigod" },
+  // ... x5
+]
+
+401 Unauthorized -> falta o expiró el JWT
+```
+Agregado 2026-07-15d: el Marketplace mostraba packs con precio hardcodeado
+en el cliente (`nivel * 1000`), calculado a mano y potencialmente
+desincronizado del precio real configurable por el admin CRUD. Este
+endpoint reusa `PackLevelOut` (mismo schema que ya devuelve
+`GET /api/admin/gacha-config`, sin el resto del dump) — no hay nada sensible
+en precio/cantidad de cartas, y el spec de juego exige explícitamente que
+las probabilidades de gacha nunca se oculten al jugador, así que no hace
+falta un endpoint separado "público" vs "admin" con distinto nivel de
+detalle, solo distinto scope (todo el dump vs. solo pack_levels).
+
 POST /api/packs/open
 Headers: Authorization: Bearer <jwt>        -- igual que /api/users/me
 Body:    { "level": 1 }   // 1-5, sin player_id: el usuario sale del token
@@ -83,7 +105,7 @@ Body:    { "level": 1 }   // 1-5, sin player_id: el usuario sale del token
 
 400 Bad Request      -> level fuera de 1-5
 401 Unauthorized     -> falta o expiró el JWT (mismo comportamiento que endpoints de /api/users)
-402 Payment Required -> coins insuficientes (precio = level * 1000)
+402 Payment Required -> coins insuficientes (precio = gacha_pack_levels.price del nivel, configurable — ya no es literalmente level*1000 desde la revisión 2026-07-15b)
 ```
 
 REST, no WebSocket — abrir un sobre no es una interacción en tiempo real
