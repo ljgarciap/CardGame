@@ -72,15 +72,8 @@ resetee `_isLoading` y muestre un mensaje de error genérico.
 
 ## 🟡 Hallazgos no bloqueantes (PLAUSIBLE — recomendado atender pronto, no obligatorio para QA)
 
-5. **TOCTOU en el precio** (`backend/app/api/packs.py:27`) — el precio se lee
-   antes de tomar el lock `SELECT...FOR UPDATE` sobre el usuario, y nada lo
-   re-valida contra un cambio de precio concurrente del admin antes del
-   commit. Baja frecuencia, pero contradice el objetivo explícito de esta
-   feature ("precio ajustable sin deploy, servidor como única fuente de
-   verdad"). (Un claim relacionado de "query duplicada" fue refutado: el
-   identity map de SQLAlchemy sirve la segunda lectura desde cache dentro de
-   la misma sesión, no es un round-trip extra a la DB — solo una llamada
-   redundante.)
+5. ~~**TOCTOU en el precio**~~ **— arreglado 2026-07-15.** Ver sección
+   "Fix del TOCTOU de precio" al final de este documento.
 6. **`KeyError` no manejado si falta una combinación en `card_archetypes`/
    `gacha_rarity_bonus`** (`backend/app/services/gacha_service.py:126,100`) —
    hoy no es alcanzable vía API (los seeds cubren el 100% de las
@@ -145,3 +138,27 @@ veces).
 "suma=1.0 con un valor negativo" que era el hueco real). Suite backend:
 **83 tests pasan + 1 skip**. `flutter analyze` 0 errores, `flutter test`
 5/5. **Veredicto actualizado: 🟢 Listo para QA.**
+
+---
+
+## Fix del TOCTOU de precio (2026-07-15, post-QA)
+
+`backend/app/api/packs.py::open_pack` ahora toma `SELECT ... FOR UPDATE`
+sobre la fila de `gacha_pack_levels` correspondiente al nivel, **antes** de
+leer `price` y **antes** de lockear la fila del usuario. Orden de locks
+documentado en el código (`pack_level` primero, `user` después) para evitar
+deadlocks si en el futuro se agregan más locks a esta transacción.
+
+No se tocó `gacha_config.py` (el lado admin): un `UPDATE` de SQLAlchemy ya
+toma el lock de fila necesario de forma atómica al ejecutarse, así que el
+lado de escritura ya era seguro — el hueco estaba solo en el lado de lectura
+de `packs.py`, que guardaba el precio en una variable de Python sin lock
+antes de usarlo.
+
+**Verificado con un lock real, no un test sintético**: un script separado
+mantuvo `SELECT ... FOR UPDATE` sobre `gacha_pack_levels level=1` durante 12
+segundos (conexión de Postgres distinta a la del servidor); un
+`POST /api/packs/open` disparado mientras el lock estaba tomado tardó
+**11.96 segundos** en responder (200, precio correcto cobrado) — bloqueado
+hasta que el lock se liberó. Suite completa sigue en 84 tests pasan + 1 skip,
+sin regresiones.

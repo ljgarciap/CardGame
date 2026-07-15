@@ -4,10 +4,11 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
+from app.models.gacha_config import GachaPackLevel
 from app.models.player_card import PlayerCard
 from app.models.user import User
 from app.schemas.pack import CardOut, PackOpenRequest, PackOpenResponse
-from app.services.gacha_service import MAX_LEVEL, MIN_LEVEL, generate_pack, get_pack_price
+from app.services.gacha_service import MAX_LEVEL, MIN_LEVEL, generate_pack
 
 router = APIRouter(prefix="/api/packs", tags=["packs"])
 
@@ -24,7 +25,17 @@ def open_pack(
             detail=f"level debe estar entre {MIN_LEVEL} y {MAX_LEVEL}",
         )
 
-    price = get_pack_price(db, payload.level)
+    # Bloquea la fila de gacha_pack_levels para toda la transacción: sin esto,
+    # un PUT admin concurrente a /api/admin/gacha-config/pack-levels/{level}
+    # puede commitear un precio nuevo entre que lo leemos y que commiteamos
+    # esta apertura, y el jugador termina pagando un precio que ya no es el
+    # vigente (TOCTOU). Orden de locks: pack_level primero, luego user —
+    # mantener este orden si en el futuro se agregan más locks acá, para no
+    # generar un deadlock con otra transacción que bloquee en el orden inverso.
+    pack_level = db.execute(
+        select(GachaPackLevel).where(GachaPackLevel.level == payload.level).with_for_update()
+    ).scalar_one()
+    price = pack_level.price
 
     # Bloquea la fila del usuario para toda la transacción: evita doble gasto
     # si el mismo usuario dispara dos aperturas concurrentes.
