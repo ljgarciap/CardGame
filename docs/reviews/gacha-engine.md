@@ -86,9 +86,11 @@ resetee `_isLoading` y muestre un mensaje de error genérico.
    probabilidades de ese mismo nivel** (`gacha_config.py:94`) — un admin
    puede configurar una garantía inconsistente con la tabla de probabilidad
    del nivel, sin que nada lo avise.
-8. **Duplicación en los 3 handlers PUT** de `gacha_config.py` — mismo patrón
-   de "dict de payload + loop de upsert" repetido 3 veces; agregar un 5to
-   valor de Rank/Rarity requiere editar 3 lugares a mano.
+8. ~~**Duplicación en los 3 handlers PUT**~~ **— arreglado 2026-07-15.**
+   Extraídos `_payload_to_values`/`_values_by_name`/`_upsert` (el patrón
+   "load-or-create" queda en un solo lugar) y `_group_by_level` para el GET
+   dump. Refactor puro, sin cambio de comportamiento — verificado con la
+   suite completa (87 passed + 1 skip, sin tocar ningún test).
 9. **El gotcha de ENUMs de Postgres + Alembic no quedó institucionalizado** —
    son comentarios inline en 2 archivos de migración + una entrada en
    `memory.md`, ya se repitió dos veces en esta misma feature y no hay nada
