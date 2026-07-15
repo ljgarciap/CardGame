@@ -38,6 +38,7 @@ void main() {
         avatarId: 'avatar_1',
         coins: 0,
         emailVerified: true,
+        isSuperadmin: false,
       ),
     );
     await tester.pumpWidget(_appWith(repository));

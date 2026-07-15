@@ -8,6 +8,7 @@ import '../providers/auth_provider.dart';
 import '../widgets/auth_primary_button.dart';
 import '../widgets/auth_scaffold.dart';
 import '../widgets/auth_text_field.dart';
+import 'gacha_config_admin_page.dart';
 import 'login_page.dart';
 
 class ProfilePage extends ConsumerStatefulWidget {
@@ -133,6 +134,18 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             isLoading: _isSaving,
             onPressed: _save,
           ),
+          if (user?.isSuperadmin ?? false) ...[
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const GachaConfigAdminPage()),
+                );
+              },
+              icon: const FaIcon(FontAwesomeIcons.gears, size: 16),
+              label: const Text('ADMIN: CONFIG DE GACHA'),
+            ),
+          ],
           const SizedBox(height: 16),
           TextButton(
             onPressed: _logout,

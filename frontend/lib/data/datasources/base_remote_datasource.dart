@@ -1,0 +1,51 @@
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+
+import '../../core/api_config.dart';
+import '../../core/errors/api_exception.dart';
+
+/// Boilerplate compartido entre todos los datasources HTTP del cliente:
+/// armar la URL, headers, y decodificar la respuesta o convertirla en
+/// [ApiException]. Extraído después de que el mismo bloque apareciera
+/// idéntico en 3 datasources (auth, packs, gacha config).
+abstract class BaseRemoteDatasource {
+  final http.Client client;
+
+  BaseRemoteDatasource({http.Client? client}) : client = client ?? http.Client();
+
+  Uri uri(String path) => Uri.parse('${ApiConfig.baseUrl}$path');
+
+  Map<String, String> get jsonHeaders => {'Content-Type': 'application/json'};
+
+  Map<String, String> authHeaders(String token) => {
+        ...jsonHeaders,
+        'Authorization': 'Bearer $token',
+      };
+
+  String _extractErrorMessage(Map<String, dynamic> body, int statusCode) {
+    final detail = body['detail'];
+    if (detail is String) return detail;
+    if (detail is List) {
+      return detail
+          .map((e) => e is Map && e['msg'] != null ? e['msg'].toString() : e.toString())
+          .join('; ');
+    }
+    return 'Error inesperado ($statusCode)';
+  }
+
+  Map<String, dynamic> decodeOrThrow(http.Response response) {
+    final Map<String, dynamic> body = response.body.isEmpty
+        ? <String, dynamic>{}
+        : jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return body;
+    }
+
+    throw ApiException(
+      statusCode: response.statusCode,
+      message: _extractErrorMessage(body, response.statusCode),
+    );
+  }
+}

@@ -5,6 +5,7 @@ class UserAccountEntity {
   final String avatarId;
   final int coins;
   final bool emailVerified;
+  final bool isSuperadmin;
 
   UserAccountEntity({
     required this.id,
@@ -13,6 +14,7 @@ class UserAccountEntity {
     required this.avatarId,
     required this.coins,
     required this.emailVerified,
+    required this.isSuperadmin,
   });
 
   factory UserAccountEntity.fromJson(Map<String, dynamic> json) {
@@ -23,6 +25,7 @@ class UserAccountEntity {
       avatarId: json['avatar_id'] as String,
       coins: json['coins'] as int,
       emailVerified: json['email_verified'] as bool,
+      isSuperadmin: json['is_superadmin'] as bool,
     );
   }
 }

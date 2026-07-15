@@ -15,6 +15,7 @@ class UserProfileResponse(BaseModel):
     avatar_id: str
     coins: int
     email_verified: bool
+    is_superadmin: bool
 
 
 class UserProfileUpdateRequest(BaseModel):

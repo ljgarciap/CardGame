@@ -36,6 +36,7 @@ class FakeAuthRepository implements AuthRepository {
       avatarId: 'avatar_1',
       coins: 0,
       emailVerified: true,
+      isSuperadmin: false,
     );
     return profile!;
   }
@@ -67,6 +68,7 @@ class FakeAuthRepository implements AuthRepository {
       avatarId: avatarId ?? profile!.avatarId,
       coins: profile!.coins,
       emailVerified: profile!.emailVerified,
+      isSuperadmin: profile!.isSuperadmin,
     );
     return profile!;
   }

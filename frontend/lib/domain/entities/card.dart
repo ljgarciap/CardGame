@@ -20,6 +20,40 @@ enum CardFaction {
   oriental,
 }
 
+/// El backend usa rank en snake_case (`minor_god`, `major_god`) — no
+/// coincide con los nombres camelCase del enum Dart, hace falta mapear en
+/// ambas direcciones (parsear la respuesta del servidor y serializar el
+/// body de un PUT admin).
+extension CardRankApi on CardRank {
+  String get apiValue {
+    switch (this) {
+      case CardRank.hero:
+        return 'hero';
+      case CardRank.demigod:
+        return 'demigod';
+      case CardRank.minorGod:
+        return 'minor_god';
+      case CardRank.majorGod:
+        return 'major_god';
+    }
+  }
+
+  static CardRank fromApiValue(String value) {
+    switch (value) {
+      case 'hero':
+        return CardRank.hero;
+      case 'demigod':
+        return CardRank.demigod;
+      case 'minor_god':
+        return CardRank.minorGod;
+      case 'major_god':
+        return CardRank.majorGod;
+      default:
+        throw ArgumentError('rank desconocido: $value');
+    }
+  }
+}
+
 class TCGCardEntity {
   final String id;
   final String name;
@@ -43,30 +77,13 @@ class TCGCardEntity {
     this.imageUrl,
   });
 
-  /// El backend usa rank en snake_case (`minor_god`, `major_god`) — no
-  /// coincide con los nombres camelCase del enum Dart, hace falta mapear.
-  static CardRank _rankFromJson(String value) {
-    switch (value) {
-      case 'hero':
-        return CardRank.hero;
-      case 'demigod':
-        return CardRank.demigod;
-      case 'minor_god':
-        return CardRank.minorGod;
-      case 'major_god':
-        return CardRank.majorGod;
-      default:
-        throw ArgumentError('rank desconocido: $value');
-    }
-  }
-
   factory TCGCardEntity.fromJson(Map<String, dynamic> json) {
     return TCGCardEntity(
       id: json['archetype_id'] as String,
       name: json['name'] as String,
       faction: CardFaction.values.byName(json['faction'] as String),
       rarity: CardRarity.values.byName(json['rarity'] as String),
-      rank: _rankFromJson(json['rank'] as String),
+      rank: CardRankApi.fromApiValue(json['rank'] as String),
       attack: json['attack'] as int,
       defense: json['defense'] as int,
       description: '',

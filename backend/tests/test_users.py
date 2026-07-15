@@ -50,6 +50,16 @@ def test_get_me_with_valid_token_returns_profile(client, db_session):
     assert body["avatar_id"] == "avatar_1"
     assert body["coins"] == 0
     assert body["email_verified"] is True
+    assert body["is_superadmin"] is False
+
+
+def test_get_me_reflects_is_superadmin(client, db_session):
+    user = _create_user(db_session, is_superadmin=True)
+
+    response = client.get("/api/users/me", headers=_auth_header(user))
+
+    assert response.status_code == 200
+    assert response.json()["is_superadmin"] is True
 
 
 def test_get_me_for_deleted_user_is_rejected(client, db_session):
