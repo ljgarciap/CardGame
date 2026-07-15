@@ -12,6 +12,9 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 from app.core.config import settings  # noqa: E402
 from app.db.base import Base  # noqa: E402
 from app.models import user  # noqa: E402,F401
+from app.models import card_archetype  # noqa: E402,F401
+from app.models import player_card  # noqa: E402,F401
+from app.models import gacha_config  # noqa: E402,F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

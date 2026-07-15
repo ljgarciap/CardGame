@@ -1,50 +1,63 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import '../../domain/entities/pack.dart';
-import '../../domain/entities/card.dart';
-import 'dart:math';
 
-class PackOpeningPage extends StatefulWidget {
+import '../../core/errors/api_exception.dart';
+import '../../domain/entities/card.dart';
+import '../../domain/entities/pack.dart';
+import '../providers/auth_provider.dart';
+import '../providers/pack_provider.dart';
+
+class PackOpeningPage extends ConsumerStatefulWidget {
   final CardPackEntity pack;
 
   const PackOpeningPage({super.key, required this.pack});
 
   @override
-  State<PackOpeningPage> createState() => _PackOpeningPageState();
+  ConsumerState<PackOpeningPage> createState() => _PackOpeningPageState();
 }
 
-class _PackOpeningPageState extends State<PackOpeningPage> {
+class _PackOpeningPageState extends ConsumerState<PackOpeningPage> {
   bool _isOpened = false;
+  bool _isLoading = false;
+  String? _errorMessage;
   List<TCGCardEntity> _revealedCards = [];
 
-  void _openPack() {
+  Future<void> _openPack() async {
     setState(() {
-      _isOpened = true;
-      // Simulate generating 5 cards based on probabilities
-      _revealedCards = List.generate(5, (index) => _generateRandomCard());
+      _isLoading = true;
+      _errorMessage = null;
     });
-  }
 
-  TCGCardEntity _generateRandomCard() {
-    // Basic random logic for demo
-    final random = Random();
-    final rarityValue = random.nextDouble();
-    CardRarity rarity = CardRarity.common;
-    if (rarityValue < 0.05) rarity = CardRarity.legendary;
-    else if (rarityValue < 0.15) rarity = CardRarity.epic;
-    else if (rarityValue < 0.40) rarity = CardRarity.rare;
-
-    return TCGCardEntity(
-      id: random.nextInt(1000).toString(),
-      name: 'God Prototype',
-      faction: CardFaction.values[random.nextInt(CardFaction.values.length)],
-      rarity: rarity,
-      rank: CardRank.values[random.nextInt(CardRank.values.length)],
-      attack: 10 + random.nextInt(90),
-      defense: 10 + random.nextInt(90),
-      description: 'A powerful deity from ancient times.',
-    );
+    try {
+      final result = await ref
+          .read(packRepositoryProvider)
+          .openPack(level: widget.pack.level.level);
+      setState(() {
+        _revealedCards = result.cards;
+        _isOpened = true;
+        _isLoading = false;
+      });
+      // El saldo ya se descontó en el servidor; refrescamos el perfil
+      // cacheado (ProfilePage lo muestra) sin bloquear la revelación.
+      unawaited(ref.read(authNotifierProvider.notifier).refreshProfile());
+    } on ApiException catch (e) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = e.message;
+      });
+    } catch (_) {
+      // Red caída, respuesta no-JSON, valor de enum desconocido, etc. — sin
+      // esto el botón quedaba deshabilitado para siempre (_isLoading nunca
+      // se resetea) y el usuario no tenía forma de reintentar.
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'No se pudo abrir el sobre. Intentá de nuevo.';
+      });
+    }
   }
 
   @override
@@ -63,7 +76,7 @@ class _PackOpeningPageState extends State<PackOpeningPage> {
               _buildClosedPack()
             else
               _buildRevealedCards(),
-            
+
             Positioned(
               top: 50,
               left: 20,
@@ -89,16 +102,32 @@ class _PackOpeningPageState extends State<PackOpeningPage> {
         ).animate(onPlay: (controller) => controller.repeat(reverse: true))
           .moveY(begin: -20, end: 20, duration: 2.seconds, curve: Curves.easeInOut)
           .shimmer(duration: 3.seconds, color: Colors.white),
-        const SizedBox(height: 50),
+        const SizedBox(height: 30),
+        if (_errorMessage != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: Text(
+              _errorMessage!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+            ),
+          ),
+        const SizedBox(height: 20),
         ElevatedButton(
-          onPressed: _openPack,
+          onPressed: _isLoading ? null : _openPack,
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.amber,
             foregroundColor: Colors.black,
             padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 20),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
           ),
-          child: const Text('OPEN PACK', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2)),
+          child: _isLoading
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.black),
+                )
+              : const Text('OPEN PACK', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2)),
         ).animate().scale(delay: 500.ms),
       ],
     );
@@ -128,7 +157,10 @@ class _PackOpeningPageState extends State<PackOpeningPage> {
         ),
         const SizedBox(height: 50),
         TextButton(
-          onPressed: () => setState(() => _isOpened = false),
+          onPressed: () => setState(() {
+            _isOpened = false;
+            _errorMessage = null;
+          }),
           child: const Text('OPEN ANOTHER', style: TextStyle(color: Colors.white54)),
         ),
       ],

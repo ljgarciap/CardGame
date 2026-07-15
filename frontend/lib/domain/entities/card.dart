@@ -42,4 +42,34 @@ class TCGCardEntity {
     required this.description,
     this.imageUrl,
   });
+
+  /// El backend usa rank en snake_case (`minor_god`, `major_god`) — no
+  /// coincide con los nombres camelCase del enum Dart, hace falta mapear.
+  static CardRank _rankFromJson(String value) {
+    switch (value) {
+      case 'hero':
+        return CardRank.hero;
+      case 'demigod':
+        return CardRank.demigod;
+      case 'minor_god':
+        return CardRank.minorGod;
+      case 'major_god':
+        return CardRank.majorGod;
+      default:
+        throw ArgumentError('rank desconocido: $value');
+    }
+  }
+
+  factory TCGCardEntity.fromJson(Map<String, dynamic> json) {
+    return TCGCardEntity(
+      id: json['archetype_id'] as String,
+      name: json['name'] as String,
+      faction: CardFaction.values.byName(json['faction'] as String),
+      rarity: CardRarity.values.byName(json['rarity'] as String),
+      rank: _rankFromJson(json['rank'] as String),
+      attack: json['attack'] as int,
+      defense: json['defense'] as int,
+      description: '',
+    );
+  }
 }
