@@ -14,8 +14,12 @@ adversarial (1-voto) sobre cada candidato de bug objetivo. 4 bugs quedaron
 **CONFIRMED**, 6 hallazgos más quedaron **PLAUSIBLE** (reales pero de menor
 severidad/probabilidad, o de arquitectura/proceso).
 
-**Actualización — los 4 blockers están arreglados** (ver sección al final).
-Los 6 hallazgos 🟡 quedan en backlog, no bloquean QA.
+**Actualización 2026-07-15 — backlog cerrado.** Los 4 blockers están
+arreglados (ver sección al final) y aprobados por QA. De los 6 hallazgos
+🟡: 5 arreglados/documentados, 1 (`guaranteed_min_rank`) cerrado como "no es
+un bug" por decisión explícita de Luis. Queda 1 ítem cosmético de QA sin
+tocar (mensajes de error con `repr` de Python) y la decisión pendiente
+sobre `CARDS_PER_PACK` hardcodeado.
 
 ---
 
@@ -98,10 +102,14 @@ resetee `_isLoading` y muestre un mensaje de error genérico.
    "load-or-create" queda en un solo lugar) y `_group_by_level` para el GET
    dump. Refactor puro, sin cambio de comportamiento — verificado con la
    suite completa (87 passed + 1 skip, sin tocar ningún test).
-9. **El gotcha de ENUMs de Postgres + Alembic no quedó institucionalizado** —
-   son comentarios inline en 2 archivos de migración + una entrada en
-   `memory.md`, ya se repitió dos veces en esta misma feature y no hay nada
-   que evite una tercera.
+9. ~~**El gotcha de ENUMs de Postgres + Alembic no quedó
+   institucionalizado**~~ **— cerrado 2026-07-15.** Nueva sección "Backend
+   Conventions" en `docs/architecture.md` con el checklist de los 4 gotchas
+   reales encontrados en esta feature (reusar un ENUM existente sin
+   `create_type=False`, no dropear el tipo en el downgrade, verificar
+   siempre contra Postgres real y no solo `Base.metadata.create_all`, y
+   `server_default` faltante en un `ADD COLUMN NOT NULL`), con ejemplos de
+   código copiables. Documentación pura, sin cambio de código.
 10. **`CARDS_PER_PACK = 5` sigue hardcodeado** — a diferencia de
     `MIN_LEVEL`/`MAX_LEVEL` (que tienen comentario justificando la excepción),
     esto controla directamente cuánto valor recibe el jugador por compra, la
