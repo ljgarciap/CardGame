@@ -136,6 +136,10 @@ def update_pack_level(
 
     pack_level = _get_pack_level_or_404(db, level)
     pack_level.price = payload.price
+    # A propósito, no se valida guaranteed_min_rank contra las probabilidades
+    # de rango de este mismo nivel (rank-probabilities/{level}) — son ejes
+    # independientes por diseño, ver comentario en
+    # gacha_service.generate_pack y docs/designs/gacha-engine.md.
     pack_level.guaranteed_min_rank = payload.guaranteed_min_rank
     db.commit()
     db.refresh(pack_level)

@@ -157,6 +157,14 @@ def generate_pack(db: Session, level: int) -> List[GeneratedCard]:
         attack, defense = _calculate_stats(archetype, rarity, rarity_bonus)
         cards.append(GeneratedCard(archetype=archetype, rarity=rarity, attack=attack, defense=defense))
 
+    # guaranteed_min_rank es intencionalmente independiente de rank_probs: es
+    # un mecanismo de pity, no una garantía estadística derivada de la tabla.
+    # Un admin puede configurar, a propósito, un nivel barato con probabilidad
+    # baja de rango alto pero con garantía de rango alto igual ("nunca te
+    # vas con las manos vacías aunque la suerte natural sea mala") — eso es
+    # una decisión de balance de juego válida, no una inconsistencia a
+    # validar en código. Ver docs/designs/gacha-engine.md, sección
+    # "guaranteed_min_rank y rank_probabilities: independientes a propósito".
     min_rank = pack_level.guaranteed_min_rank
     if min_rank is not None:
         meets_guarantee = any(_RANK_INDEX[c.archetype.rank] >= _RANK_INDEX[min_rank] for c in cards)

@@ -194,6 +194,27 @@ rango válido (1-5) sí se quedan en código: no son un valor de negocio
 ajustable, son la cardinalidad fija del catálogo de niveles definida por el
 Game Expert.
 
+### `guaranteed_min_rank` y `rank_probabilities`: independientes a propósito
+Nota agregada 2026-07-15 tras una revisión de Senior Reviewer que marcó como
+hallazgo (🟡, no bloqueante) que el CRUD admin permite editar
+`guaranteed_min_rank` de un nivel sin cruzar validación contra la tabla
+`rank_probabilities` de ese mismo nivel — por ejemplo, nada impide
+configurar un nivel barato con probabilidad baja de rango alto pero con
+garantía de rango alto igual.
+
+Decisión (Luis, 2026-07-15): esto **no se valida en código**. La garantía
+mínima es un mecanismo de pity, no una propiedad estadística derivada de la
+tabla de probabilidades — que un nivel tenga probabilidad natural baja de
+un rango y aun así garantice ese rango es una decisión de balance de juego
+legítima ("nunca te vas con las manos vacías, aunque la suerte natural sea
+mala"), no una inconsistencia técnica. Agregar una validación bloqueante acá
+requeriría inventar un umbral de "cuán baja es demasiado baja", que sería
+exactamente el tipo de valor de negocio hardcodeado que esta feature existe
+para evitar. Si en el futuro se quiere una regla real sobre esta interacción
+(ej. "la garantía no puede pedir un rango con probabilidad natural menor a
+X%"), eso es una decisión del Game Expert — la spec de juego, no este
+diseño técnico, debe definir el umbral.
+
 ## Transacción y concurrencia
 Todo en una sola transacción DB:
 1. `SELECT ... FOR UPDATE` sobre la fila de `users` del usuario autenticado

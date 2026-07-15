@@ -82,10 +82,17 @@ resetee `_isLoading` y muestre un mensaje de error genérico.
    lanza con el dato correcto) + 1 de integración (`monkeypatch` de
    `generate_pack`, verifica el 500 limpio end-to-end sin depender de la
    aleatoriedad del RNG para forzar la combinación faltante).
-7. **`guaranteed_min_rank` editable sin cruzar validación contra las
-   probabilidades de ese mismo nivel** (`gacha_config.py:94`) — un admin
-   puede configurar una garantía inconsistente con la tabla de probabilidad
-   del nivel, sin que nada lo avise.
+7. ~~**`guaranteed_min_rank` editable sin cruzar validación**~~ **— cerrado
+   2026-07-15, decisión de Luis: no es un bug.** La garantía mínima es un
+   mecanismo de pity, no una propiedad derivada de la tabla de
+   probabilidades — que un nivel barato garantice un rango con probabilidad
+   natural baja es una decisión de balance válida, no una inconsistencia
+   técnica. Agregar un umbral de validación acá requeriría inventar otro
+   valor de negocio hardcodeado (exactamente lo que esta feature existe
+   para evitar); si se quiere una regla real, es una decisión del Game
+   Expert, no de este código. Documentado en
+   `docs/designs/gacha-engine.md` (sección nueva) y con comentarios en
+   `gacha_service.py`/`gacha_config.py`.
 8. ~~**Duplicación en los 3 handlers PUT**~~ **— arreglado 2026-07-15.**
    Extraídos `_payload_to_values`/`_values_by_name`/`_upsert` (el patrón
    "load-or-create" queda en un solo lugar) y `_group_by_level` para el GET
