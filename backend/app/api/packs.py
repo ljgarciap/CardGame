@@ -8,7 +8,12 @@ from app.models.gacha_config import GachaPackLevel
 from app.models.player_card import PlayerCard
 from app.models.user import User
 from app.schemas.pack import CardOut, PackOpenRequest, PackOpenResponse
-from app.services.gacha_service import MAX_LEVEL, MIN_LEVEL, generate_pack
+from app.services.gacha_service import (
+    MAX_LEVEL,
+    MIN_LEVEL,
+    IncompleteGachaConfigError,
+    generate_pack,
+)
 
 router = APIRouter(prefix="/api/packs", tags=["packs"])
 
@@ -48,7 +53,15 @@ def open_pack(
             status_code=status.HTTP_402_PAYMENT_REQUIRED, detail="Saldo insuficiente"
         )
 
-    cards = generate_pack(db, payload.level)
+    try:
+        cards = generate_pack(db, payload.level)
+    except IncompleteGachaConfigError:
+        # Problema de datos/seed del servidor, no algo que el cliente pueda
+        # arreglar — no exponemos el detalle interno (qué combinación falta).
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error de configuración del gacha. Contactá a soporte.",
+        )
 
     locked_user.coins -= price
     for card in cards:

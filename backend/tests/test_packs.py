@@ -3,6 +3,7 @@ from app.db.seed import seed_archetypes
 from app.db.seed_gacha_config import seed_gacha_config
 from app.models.player_card import PlayerCard
 from app.models.user import User
+from app.services.gacha_service import IncompleteGachaConfigError
 
 VALID_PASSWORD = "supersecret123"
 
@@ -98,3 +99,23 @@ def test_open_pack_price_scales_with_level(client, db_session):
 
     assert response.status_code == 200
     assert response.json()["remaining_coins"] == 5000 - 5000
+
+
+def test_open_pack_returns_clean_500_when_gacha_config_is_incomplete(
+    client, db_session, monkeypatch
+):
+    seed_archetypes(db_session)
+    seed_gacha_config(db_session)
+    user = _create_user(db_session)
+
+    def _raise_incomplete(db, level):
+        raise IncompleteGachaConfigError("config incompleta de prueba")
+
+    monkeypatch.setattr("app.api.packs.generate_pack", _raise_incomplete)
+
+    response = client.post(
+        "/api/packs/open", headers=_auth_header(user), json={"level": 1}
+    )
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Error de configuración del gacha. Contactá a soporte."

@@ -36,6 +36,15 @@ RANK_ORDER = [Rank.hero, Rank.demigod, Rank.minor_god, Rank.major_god]
 _RANK_INDEX = {rank: i for i, rank in enumerate(RANK_ORDER)}
 
 
+class IncompleteGachaConfigError(RuntimeError):
+    """El catálogo de arquetipos o la config de bono de rareza no cubre una
+    combinación necesaria para generar una carta — problema de datos/seed,
+    no de input del usuario. No debería pasar en operación normal (los
+    seeds cubren el 100% de las combinaciones), pero agregar un valor nuevo
+    a Faction/Rank/Rarity sin actualizar el seed correspondiente dispararía
+    esto en vez de un KeyError crudo a mitad de una transacción."""
+
+
 @dataclass
 class GeneratedCard:
     archetype: CardArchetype
@@ -91,13 +100,22 @@ def _round_half_up(value: Decimal) -> int:
     return int(value.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
+def _get_rarity_bonus(rarity_bonus: Dict[Rarity, Decimal], rarity: Rarity) -> Decimal:
+    bonus = rarity_bonus.get(rarity)
+    if bonus is None:
+        raise IncompleteGachaConfigError(
+            f"no hay bono configurado para rarity={rarity.value} — revisar seed_gacha_config"
+        )
+    return bonus
+
+
 def _calculate_stats(
     archetype: CardArchetype, rarity: Rarity, rarity_bonus: Dict[Rarity, Decimal]
 ) -> tuple[int, int]:
     # round() de Python usa banker's rounding (half-to-even): round(30*1.35) da 40,
     # pero la tabla del spec (docs/specs/game-gacha-engine.md) exige 41 para
     # Hero+Legendary -> se necesita redondeo half-up explícito, no el round() nativo.
-    multiplier = Decimal(1) + rarity_bonus[rarity]
+    multiplier = Decimal(1) + _get_rarity_bonus(rarity_bonus, rarity)
     attack = _round_half_up(Decimal(archetype.base_attack) * multiplier)
     defense = _round_half_up(Decimal(archetype.base_defense) * multiplier)
     return attack, defense
@@ -106,6 +124,18 @@ def _calculate_stats(
 def _load_archetypes_by_key(db: Session) -> Dict[tuple, CardArchetype]:
     archetypes = db.execute(select(CardArchetype)).scalars().all()
     return {(a.faction, a.rank): a for a in archetypes}
+
+
+def _get_archetype(
+    archetypes_by_key: Dict[tuple, CardArchetype], faction: Faction, rank: Rank
+) -> CardArchetype:
+    archetype = archetypes_by_key.get((faction, rank))
+    if archetype is None:
+        raise IncompleteGachaConfigError(
+            f"no hay arquetipo para faction={faction.value} rank={rank.value} — "
+            "revisar seed_archetypes"
+        )
+    return archetype
 
 
 def generate_pack(db: Session, level: int) -> List[GeneratedCard]:
@@ -123,7 +153,7 @@ def generate_pack(db: Session, level: int) -> List[GeneratedCard]:
         rank = weighted_choice(rank_probs)
         rarity = weighted_choice(rarity_probs)
         faction = uniform_choice(list(Faction))
-        archetype = archetypes_by_key[(faction, rank)]
+        archetype = _get_archetype(archetypes_by_key, faction, rank)
         attack, defense = _calculate_stats(archetype, rarity, rarity_bonus)
         cards.append(GeneratedCard(archetype=archetype, rarity=rarity, attack=attack, defense=defense))
 
@@ -132,7 +162,7 @@ def generate_pack(db: Session, level: int) -> List[GeneratedCard]:
         meets_guarantee = any(_RANK_INDEX[c.archetype.rank] >= _RANK_INDEX[min_rank] for c in cards)
         if not meets_guarantee:
             last = cards[-1]
-            forced_archetype = archetypes_by_key[(last.archetype.faction, min_rank)]
+            forced_archetype = _get_archetype(archetypes_by_key, last.archetype.faction, min_rank)
             attack, defense = _calculate_stats(forced_archetype, last.rarity, rarity_bonus)
             cards[-1] = GeneratedCard(
                 archetype=forced_archetype, rarity=last.rarity, attack=attack, defense=defense

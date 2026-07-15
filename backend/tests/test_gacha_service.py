@@ -14,7 +14,10 @@ from app.models.enums import Faction, Rank, Rarity
 from app.services.gacha_service import (
     CARDS_PER_PACK,
     RANK_ORDER,
+    IncompleteGachaConfigError,
     _calculate_stats,
+    _get_archetype,
+    _get_rarity_bonus,
     generate_pack,
     load_rarity_bonus,
 )
@@ -118,3 +121,13 @@ def test_rarity_stat_bonus_formula(seeded, rank, rarity, expected):
     attack, defense = _calculate_stats(archetype, rarity, rarity_bonus)
     assert attack == expected
     assert defense == expected
+
+
+def test_get_archetype_raises_clear_error_when_combination_missing():
+    with pytest.raises(IncompleteGachaConfigError, match="greek"):
+        _get_archetype({}, Faction.greek, Rank.hero)
+
+
+def test_get_rarity_bonus_raises_clear_error_when_missing():
+    with pytest.raises(IncompleteGachaConfigError, match="rare"):
+        _get_rarity_bonus({}, Rarity.rare)

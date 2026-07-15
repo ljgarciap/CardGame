@@ -74,13 +74,14 @@ resetee `_isLoading` y muestre un mensaje de error genérico.
 
 5. ~~**TOCTOU en el precio**~~ **— arreglado 2026-07-15.** Ver sección
    "Fix del TOCTOU de precio" al final de este documento.
-6. **`KeyError` no manejado si falta una combinación en `card_archetypes`/
-   `gacha_rarity_bonus`** (`backend/app/services/gacha_service.py:126,100`) —
-   hoy no es alcanzable vía API (los seeds cubren el 100% de las
-   combinaciones y no hay forma de dejar una fila parcial), pero el día que
-   se agregue un valor nuevo a `Faction`/`Rank`/`Rarity` sin actualizar el
-   seed correspondiente, esto va a tirar un 500 crudo en vez de un error
-   claro.
+6. ~~**`KeyError` no manejado si falta una combinación**~~ **— arreglado
+   2026-07-15.** `_get_archetype`/`_get_rarity_bonus` ahora lanzan
+   `IncompleteGachaConfigError` (mensaje claro, sin exponer detalle interno
+   al cliente) en vez de un `KeyError` crudo; `packs.py` la captura y
+   devuelve 500 con un mensaje limpio. Tests: 2 unitarios (la excepción se
+   lanza con el dato correcto) + 1 de integración (`monkeypatch` de
+   `generate_pack`, verifica el 500 limpio end-to-end sin depender de la
+   aleatoriedad del RNG para forzar la combinación faltante).
 7. **`guaranteed_min_rank` editable sin cruzar validación contra las
    probabilidades de ese mismo nivel** (`gacha_config.py:94`) — un admin
    puede configurar una garantía inconsistente con la tabla de probabilidad
