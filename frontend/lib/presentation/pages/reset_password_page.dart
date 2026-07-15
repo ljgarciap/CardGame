@@ -8,9 +8,11 @@ import '../widgets/auth_scaffold.dart';
 import '../widgets/auth_text_field.dart';
 import 'login_page.dart';
 
-/// Recibe [token] cuando se abre desde el link del correo (deep link, pendiente
-/// de implementar). Mientras tanto el campo de token queda editable para poder
-/// pegarlo manualmente en dev (ej. copiándolo desde la UI de Mailhog).
+/// Recibe [token] cuando se abre desde el link del correo (deep link
+/// `cardgame://reset-password?token=...`, ver `main.dart`/`core/deep_link.dart`).
+/// El campo de token queda editable igual, como fallback manual (ej. en un
+/// entorno donde el deep link no esté registrado, o pegándolo a mano desde
+/// la UI de Mailhog en dev).
 class ResetPasswordPage extends ConsumerStatefulWidget {
   final String? token;
 

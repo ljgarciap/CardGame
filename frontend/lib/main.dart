@@ -1,21 +1,65 @@
+import 'dart:async';
+
+import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'core/deep_link.dart';
 import 'presentation/pages/login_page.dart';
 import 'presentation/pages/main_menu_page.dart';
+import 'presentation/pages/reset_password_page.dart';
 import 'presentation/providers/auth_provider.dart';
 
 void main() {
   runApp(const ProviderScope(child: CardGameApp()));
 }
 
-class CardGameApp extends StatelessWidget {
+class CardGameApp extends ConsumerStatefulWidget {
   const CardGameApp({super.key});
+
+  @override
+  ConsumerState<CardGameApp> createState() => _CardGameAppState();
+}
+
+class _CardGameAppState extends ConsumerState<CardGameApp> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
+  final _appLinks = AppLinks();
+  StreamSubscription<Uri>? _linkSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _initDeepLinks();
+  }
+
+  Future<void> _initDeepLinks() async {
+    // Cold start: la app se abrió directamente desde el link (no estaba corriendo).
+    final initialUri = await _appLinks.getInitialLink();
+    if (initialUri != null) _handleUri(initialUri);
+
+    // App ya corriendo, llega un link nuevo (deep link mientras está abierta/en background).
+    _linkSubscription = _appLinks.uriLinkStream.listen(_handleUri);
+  }
+
+  void _handleUri(Uri uri) {
+    final token = extractResetPasswordToken(uri);
+    if (token == null) return;
+    _navigatorKey.currentState?.push(
+      MaterialPageRoute(builder: (_) => ResetPasswordPage(token: token)),
+    );
+  }
+
+  @override
+  void dispose() {
+    _linkSubscription?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: 'Premium Card Game',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(

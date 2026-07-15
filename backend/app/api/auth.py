@@ -158,7 +158,12 @@ async def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
 
 async def _send_password_reset_email(email: str, token: str) -> None:
-    reset_url = f"https://cardgame.local/reset-password?token={token}"
+    # Custom URL scheme, no HTTPS Universal/App Link: cardgame.local no es un
+    # dominio real que podamos hostear, así que no hay forma de publicar
+    # apple-app-site-association/assetlinks.json para verificarlo. El
+    # frontend registra este scheme (ver frontend/lib/main.dart,
+    # core/deep_link.dart) para abrir ResetPasswordPage con el token.
+    reset_url = f"cardgame://reset-password?token={token}"
     await send_email(
         to=email,
         subject="Restablecer tu contraseña de CardGame",

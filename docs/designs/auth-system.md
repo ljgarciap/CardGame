@@ -91,6 +91,32 @@ POST /api/auth/request-password-reset   { email }
 POST /api/auth/reset-password   { token, new_password }
   -> 200 cambia password_hash, invalida el token
   -> 400 si el token no existe, expiró o ya fue usado
+```
+
+### Deep link de reset-password (2026-07-15e)
+El email de reset mandaba un link `https://cardgame.local/reset-password?token=...`
+que no podía abrir la app: `cardgame.local` no es un dominio real, así que no
+hay forma de hostear `apple-app-site-association`/`assetlinks.json` para que
+iOS/Android verifiquen un Universal/App Link HTTPS. Se cambió a un **custom
+URL scheme** (`cardgame://reset-password?token=...`), que no necesita
+infraestructura de dominio:
+- Backend: `app/api/auth.py::_send_password_reset_email` arma el link con el
+  scheme nuevo.
+- Frontend: `main.dart` registra un listener de `app_links` (cold start +
+  app corriendo) que parsea el token (`core/deep_link.dart`, función pura
+  testeada sin necesidad de dispositivo) y navega a `ResetPasswordPage`
+  pre-rellenada. iOS (`Info.plist`, `CFBundleURLTypes`) y Android
+  (`AndroidManifest.xml`, intent-filter con `android:scheme="cardgame"`)
+  registran el scheme.
+- El campo de token en `ResetPasswordPage` sigue editable como fallback
+  manual (path existente vía `forgot_password_page.dart`, sin cambios).
+
+**Límite de verificación**: no hay simulador/dispositivo en este entorno, así
+que el ruteo nativo real (¿el OS efectivamente abre la app al tocar el link?)
+no se pudo confirmar end-to-end. Sí se verificó: el email real (contra
+Mailhog) contiene el link con el formato correcto, y la función de parseo del
+token tiene tests unitarios. Recomendado: probar en un dispositivo/simulador
+real antes de considerar esto 100% cerrado.
 
 GET  /api/users/me              (requiere JWT)
   -> 200 { id, email, username, avatar_id, coins, email_verified }
