@@ -18,6 +18,15 @@ services:
       - "8025:8025" # web UI para inspeccionar correos en dev
       - "1025:1025" # SMTP
 
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    # Estado de partidas en tiempo real (docs/designs/realtime-match.md) —
+    # store compartido entre workers/procesos de backend, no persiste a disco
+    # a propósito (partidas en curso no necesitan sobrevivir un restart).
+
   backend:
     build: ./backend
     restart: always
@@ -29,9 +38,11 @@ services:
       - SMTP_HOST=mailhog
       - SMTP_PORT=1025
       - SMTP_FROM=noreply@cardgame.local
+      - REDIS_URL=redis://redis:6379/0
     depends_on:
       - db
       - mailhog
+      - redis
 
 volumes:
   db_data:

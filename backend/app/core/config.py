@@ -12,5 +12,7 @@ class Settings(BaseSettings):
     smtp_use_tls: bool = False
     smtp_from: str = "noreply@cardgame.local"
 
+    redis_url: str = "redis://localhost:6379/0"
+
 
 settings = Settings()

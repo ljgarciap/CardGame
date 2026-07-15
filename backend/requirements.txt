@@ -8,6 +8,7 @@ pydantic-settings
 email-validator
 python-dotenv
 websockets
+redis
 bcrypt
 python-jose[cryptography]
 aiosmtplib
