@@ -138,6 +138,7 @@ users
 gacha_pack_levels
   level                 int pk                        -- 1-5
   price                 int
+  cards_per_pack        int                           -- agregado 2026-07-15c, antes CARDS_PER_PACK hardcodeado
   guaranteed_min_rank   enum(hero, demigod, minor_god, major_god) nullable
 
 gacha_rank_probabilities
@@ -166,10 +167,11 @@ es superadmin, 401 si no hay JWT válido (igual que el resto de la API).
 ```
 GET  /api/admin/gacha-config
   -> dump completo: pack_levels, rank_probabilities, rarity_probabilities, rarity_bonus
-     (la futura pantalla Flutter consume este único endpoint para poblarse)
+     (GachaConfigAdminPage en Flutter consume este único endpoint para poblarse)
 
 PUT  /api/admin/gacha-config/pack-levels/{level}
-  Body: { "price": int, "guaranteed_min_rank": "demigod" | null }
+  Body: { "price": int, "cards_per_pack": int, "guaranteed_min_rank": "demigod" | null }
+  400 si price <= 0 o cards_per_pack <= 0
 
 PUT  /api/admin/gacha-config/rank-probabilities/{level}
   Body: { "hero": float, "demigod": float, "minor_god": float, "major_god": float }
@@ -193,6 +195,21 @@ requests para esta iteración). `MIN_LEVEL`/`MAX_LEVEL` como constantes de
 rango válido (1-5) sí se quedan en código: no son un valor de negocio
 ajustable, son la cardinalidad fija del catálogo de niveles definida por el
 Game Expert.
+
+### `CARDS_PER_PACK` movido a la tabla paramétrica (2026-07-15c)
+Hallazgo de conventions del Senior Reviewer: `CARDS_PER_PACK = 5` seguía
+hardcodeado en `gacha_service.py` después de que el resto de los valores de
+negocio de esta misma feature (precio, probabilidades, bono) se movieran a
+DB — a diferencia de `MIN_LEVEL`/`MAX_LEVEL`, no tenía una justificación
+explícita de por qué era una excepción. Decisión de Luis: moverlo.
+
+`gacha_pack_levels` gana la columna `cards_per_pack` (por nivel, no global —
+mismo criterio que `price`: nada impide que a futuro un nivel premium
+entregue más cartas por sobre). `generate_pack` lee `pack_level.cards_per_pack`
+en vez de la constante de módulo. CRUD: `PUT pack-levels/{level}` ahora
+requiere `cards_per_pack` en el body (valida `> 0`, mismo patrón que
+`price`) — **breaking change en el contrato**, el frontend (datasource,
+repository, `GachaConfigAdminPage`) se actualizó en el mismo cambio.
 
 ### `guaranteed_min_rank` y `rank_probabilities`: independientes a propósito
 Nota agregada 2026-07-15 tras una revisión de Senior Reviewer que marcó como

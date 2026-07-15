@@ -9,6 +9,7 @@ abstract class GachaConfigRepository {
   Future<void> updatePackLevel({
     required int level,
     required int price,
+    required int cardsPerPack,
     required CardRank? guaranteedMinRank,
   });
 

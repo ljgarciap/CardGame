@@ -67,3 +67,9 @@ Los 6 hallazgos 🟡 de `docs/reviews/gacha-engine.md` quedan en backlog, no blo
 
 ## 2026-07-15 (continuación 2)
 - **Fix del hallazgo cosmético de QA**: `_validate_non_negative` (`app/api/admin/gacha_config.py`) armaba el mensaje 400 dejando que el f-string usara `repr()` del dict (`"{<Rank.hero: 'hero'>: Decimal('-0.2')}"`). Ahora arma el texto con `k.value`/`str(v)` — mensaje legible (`"hero: -0.2"`). Test nuevo que fija el formato. Suite: 87 passed + 1 skip. `docs/qa/gacha-engine-2026-07-15.md` actualizado. Con esto, de todo lo encontrado en la revisión de esta feature solo queda pendiente de decisión `CARDS_PER_PACK` hardcodeado.
+
+## 2026-07-15 (continuación 3)
+- **`CARDS_PER_PACK` movido a la tabla paramétrica** (decisión de Luis): `gacha_pack_levels` gana `cards_per_pack` (por nivel, no global). `generate_pack` lee `pack_level.cards_per_pack` en vez de la constante. Migración con `server_default='5'` (siguiendo el checklist de `docs/architecture.md`), verificada con una fila existente insertada a mano + ciclo upgrade→downgrade→upgrade. CRUD: `PUT pack-levels/{level}` ahora exige `cards_per_pack` en el body (valida `>0`).
+  - **Breaking change de contrato detectado y arreglado en el mismo cambio**: probé el body viejo (sin `cards_per_pack`) contra el backend real → 422 `"Field required"`, confirmando que rompía la pantalla de admin de Flutter ya construida. Actualicé `GachaPackLevelConfig`, `GachaConfigRemoteDatasource.updatePackLevel`, `GachaConfigRepository`/`RepositoryImpl`, `GachaConfigAdminPage` (nuevo campo "Cartas por sobre") y el fake de tests — todo en el mismo commit, no quedó roto entre pasos.
+  - Suite: **90 passed + 1 skip** (backend, +3 tests nuevos), **10/10** (frontend). `flutter analyze` 0 errores.
+  - Con esto, **no queda nada pendiente** de la revisión de Senior Reviewer/QA de esta feature.

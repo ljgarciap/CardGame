@@ -61,7 +61,7 @@ def test_update_pack_level_price(client, db_session):
     response = client.put(
         "/api/admin/gacha-config/pack-levels/1",
         headers=_auth_header(user),
-        json={"price": 1500, "guaranteed_min_rank": None},
+        json={"price": 1500, "cards_per_pack": 5, "guaranteed_min_rank": None},
     )
 
     assert response.status_code == 200
@@ -75,7 +75,7 @@ def test_update_pack_level_rejects_regular_user(client, db_session):
     response = client.put(
         "/api/admin/gacha-config/pack-levels/1",
         headers=_auth_header(user),
-        json={"price": 1500, "guaranteed_min_rank": None},
+        json={"price": 1500, "cards_per_pack": 5, "guaranteed_min_rank": None},
     )
     assert response.status_code == 403
 
@@ -87,7 +87,7 @@ def test_update_pack_level_nonexistent_level_is_404(client, db_session):
     response = client.put(
         "/api/admin/gacha-config/pack-levels/99",
         headers=_auth_header(user),
-        json={"price": 1000, "guaranteed_min_rank": None},
+        json={"price": 1000, "cards_per_pack": 5, "guaranteed_min_rank": None},
     )
     assert response.status_code == 404
 
@@ -100,9 +100,35 @@ def test_update_pack_level_rejects_zero_or_negative_price(client, db_session):
         response = client.put(
             "/api/admin/gacha-config/pack-levels/1",
             headers=_auth_header(user),
-            json={"price": bad_price, "guaranteed_min_rank": None},
+            json={"price": bad_price, "cards_per_pack": 5, "guaranteed_min_rank": None},
         )
         assert response.status_code == 400, bad_price
+
+
+def test_update_pack_level_rejects_zero_or_negative_cards_per_pack(client, db_session):
+    seed_gacha_config(db_session)
+    user = _create_user(db_session, is_superadmin=True)
+
+    for bad_count in (0, -3):
+        response = client.put(
+            "/api/admin/gacha-config/pack-levels/1",
+            headers=_auth_header(user),
+            json={"price": 1000, "cards_per_pack": bad_count, "guaranteed_min_rank": None},
+        )
+        assert response.status_code == 400, bad_count
+
+
+def test_update_pack_level_cards_per_pack_changes_pack_size(client, db_session):
+    seed_gacha_config(db_session)
+    user = _create_user(db_session, is_superadmin=True)
+
+    response = client.put(
+        "/api/admin/gacha-config/pack-levels/1",
+        headers=_auth_header(user),
+        json={"price": 1000, "cards_per_pack": 8, "guaranteed_min_rank": None},
+    )
+    assert response.status_code == 200
+    assert response.json()["cards_per_pack"] == 8
 
 
 def test_update_rank_probabilities_valid_sum(client, db_session):
@@ -213,7 +239,7 @@ def test_gacha_service_reflects_price_update_without_stale_cache(client, db_sess
     response = client.put(
         "/api/admin/gacha-config/pack-levels/2",
         headers=_auth_header(user),
-        json={"price": 2500, "guaranteed_min_rank": None},
+        json={"price": 2500, "cards_per_pack": 5, "guaranteed_min_rank": None},
     )
     assert response.status_code == 200
 

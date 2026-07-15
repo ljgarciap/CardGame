@@ -19,6 +19,7 @@ from app.models.gacha_config import (
 )
 
 PRICE_PER_LEVEL = 1000
+CARDS_PER_PACK = 5
 
 # level -> rango mínimo garantizado (None = sin garantía, niveles 1-2)
 GUARANTEED_MIN_RANK = {
@@ -61,7 +62,10 @@ def seed_gacha_config(session: Session) -> None:
     for level, min_rank in GUARANTEED_MIN_RANK.items():
         session.add(
             GachaPackLevel(
-                level=level, price=level * PRICE_PER_LEVEL, guaranteed_min_rank=min_rank
+                level=level,
+                price=level * PRICE_PER_LEVEL,
+                cards_per_pack=CARDS_PER_PACK,
+                guaranteed_min_rank=min_rank,
             )
         )
 

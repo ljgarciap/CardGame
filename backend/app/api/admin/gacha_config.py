@@ -137,9 +137,15 @@ def update_pack_level(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"price debe ser positivo (recibido: {payload.price})",
         )
+    if payload.cards_per_pack <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"cards_per_pack debe ser positivo (recibido: {payload.cards_per_pack})",
+        )
 
     pack_level = _get_pack_level_or_404(db, level)
     pack_level.price = payload.price
+    pack_level.cards_per_pack = payload.cards_per_pack
     # A propósito, no se valida guaranteed_min_rank contra las probabilidades
     # de rango de este mismo nivel (rank-probabilities/{level}) — son ejes
     # independientes por diseño, ver comentario en

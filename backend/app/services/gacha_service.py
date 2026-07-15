@@ -28,8 +28,6 @@ from app.models.gacha_config import (
 MIN_LEVEL = 1
 MAX_LEVEL = 5
 
-CARDS_PER_PACK = 5
-
 _rng = random.SystemRandom()
 
 RANK_ORDER = [Rank.hero, Rank.demigod, Rank.minor_god, Rank.major_god]
@@ -149,7 +147,7 @@ def generate_pack(db: Session, level: int) -> List[GeneratedCard]:
     archetypes_by_key = _load_archetypes_by_key(db)
 
     cards: List[GeneratedCard] = []
-    for _ in range(CARDS_PER_PACK):
+    for _ in range(pack_level.cards_per_pack):
         rank = weighted_choice(rank_probs)
         rarity = weighted_choice(rarity_probs)
         faction = uniform_choice(list(Faction))

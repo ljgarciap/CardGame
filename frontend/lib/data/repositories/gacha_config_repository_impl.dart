@@ -34,6 +34,7 @@ class GachaConfigRepositoryImpl implements GachaConfigRepository {
   Future<void> updatePackLevel({
     required int level,
     required int price,
+    required int cardsPerPack,
     required CardRank? guaranteedMinRank,
   }) async {
     final token = await _requireToken();
@@ -41,6 +42,7 @@ class GachaConfigRepositoryImpl implements GachaConfigRepository {
       token: token,
       level: level,
       price: price,
+      cardsPerPack: cardsPerPack,
       guaranteedMinRank: guaranteedMinRank,
     );
   }

@@ -24,6 +24,7 @@ class FakeGachaConfigRepository implements GachaConfigRepository {
   Future<void> updatePackLevel({
     required int level,
     required int price,
+    required int cardsPerPack,
     required CardRank? guaranteedMinRank,
   }) async {
     calls.add('updatePackLevel($level)');
@@ -72,6 +73,7 @@ class FakeGachaConfigRepository implements GachaConfigRepository {
           GachaPackLevelConfig(
             level: level,
             price: level * 1000,
+            cardsPerPack: 5,
             guaranteedMinRank: level >= 3 ? CardRank.demigod : null,
           ),
       ],

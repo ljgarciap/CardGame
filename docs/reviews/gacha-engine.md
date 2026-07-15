@@ -14,12 +14,13 @@ adversarial (1-voto) sobre cada candidato de bug objetivo. 4 bugs quedaron
 **CONFIRMED**, 6 hallazgos más quedaron **PLAUSIBLE** (reales pero de menor
 severidad/probabilidad, o de arquitectura/proceso).
 
-**Actualización 2026-07-15 — backlog cerrado.** Los 4 blockers están
+**Actualización 2026-07-15 — todo cerrado.** Los 4 blockers están
 arreglados (ver sección al final) y aprobados por QA. De los 6 hallazgos
 🟡: 5 arreglados/documentados, 1 (`guaranteed_min_rank`) cerrado como "no es
-un bug" por decisión explícita de Luis. Queda 1 ítem cosmético de QA sin
-tocar (mensajes de error con `repr` de Python) y la decisión pendiente
-sobre `CARDS_PER_PACK` hardcodeado.
+un bug" por decisión explícita de Luis. El hallazgo cosmético de QA
+(mensajes de error con `repr` de Python) está arreglado. `CARDS_PER_PACK`
+(hallazgo de conventions) se movió a la tabla paramétrica por decisión de
+Luis — ver sección final.
 
 ---
 
@@ -110,12 +111,17 @@ resetee `_isLoading` y muestre un mensaje de error genérico.
    siempre contra Postgres real y no solo `Base.metadata.create_all`, y
    `server_default` faltante en un `ADD COLUMN NOT NULL`), con ejemplos de
    código copiables. Documentación pura, sin cambio de código.
-10. **`CARDS_PER_PACK = 5` sigue hardcodeado** — a diferencia de
-    `MIN_LEVEL`/`MAX_LEVEL` (que tienen comentario justificando la excepción),
-    esto controla directamente cuánto valor recibe el jugador por compra, la
-    misma categoría económica que ya se parametrizó en esta misma tarea. Es
-    una decisión de alcance defendible, pero debería ser explícita (comentario
-    o mover a la tabla), no un olvido silencioso.
+10. ~~**`CARDS_PER_PACK = 5` sigue hardcodeado**~~ **— arreglado
+    2026-07-15c.** Movido a `gacha_pack_levels.cards_per_pack` (por nivel,
+    no global, mismo criterio que `price`). `PUT pack-levels/{level}` ahora
+    requiere `cards_per_pack` en el body (valida `> 0`) — **breaking change
+    de contrato**, el frontend (`GachaConfigRemoteDatasource`,
+    `GachaConfigRepositoryImpl`, `GachaConfigAdminPage`, y el fake de tests)
+    se actualizó en el mismo cambio; se detectó el break probándolo en vivo
+    contra el backend real (curl sin el campo nuevo → 422) antes de tocar
+    Flutter, no después. Migración con `server_default='5'` verificada
+    contra una fila existente + ciclo upgrade→downgrade→upgrade. Suite:
+    90 passed + 1 skip (backend), 10/10 (frontend).
 
 ---
 

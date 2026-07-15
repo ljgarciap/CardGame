@@ -19,6 +19,7 @@ class GachaPackLevel(Base):
 
     level: Mapped[int] = mapped_column(Integer, primary_key=True)
     price: Mapped[int] = mapped_column(Integer, nullable=False)
+    cards_per_pack: Mapped[int] = mapped_column(Integer, nullable=False)
     guaranteed_min_rank: Mapped[Optional[Rank]] = mapped_column(
         SAEnum(Rank, name="rank"), nullable=True
     )

@@ -11,8 +11,8 @@ from app.db.seed_gacha_config import (
 )
 from app.models.card_archetype import CardArchetype
 from app.models.enums import Faction, Rank, Rarity
+from app.models.gacha_config import GachaPackLevel
 from app.services.gacha_service import (
-    CARDS_PER_PACK,
     RANK_ORDER,
     IncompleteGachaConfigError,
     _calculate_stats,
@@ -89,8 +89,19 @@ def test_non_guaranteed_levels_have_no_minimum_rank(level):
 
 
 def test_pack_always_has_five_cards(seeded):
+    # 5 es el valor sembrado por default (seed_gacha_config.CARDS_PER_PACK),
+    # no una constante fija del servicio -- ver test de abajo para el caso
+    # de un nivel configurado con otra cantidad.
     for level in range(1, 6):
-        assert len(generate_pack(seeded, level)) == CARDS_PER_PACK
+        assert len(generate_pack(seeded, level)) == 5
+
+
+def test_generate_pack_respects_configured_cards_per_pack(seeded):
+    pack_level = seeded.get(GachaPackLevel, 1)
+    pack_level.cards_per_pack = 8
+    seeded.commit()
+
+    assert len(generate_pack(seeded, 1)) == 8
 
 
 @pytest.mark.parametrize("level", [0, 6, -1, 100])

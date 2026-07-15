@@ -10,11 +10,13 @@ import 'card.dart';
 class GachaPackLevelConfig {
   final int level;
   final int price;
+  final int cardsPerPack;
   final CardRank? guaranteedMinRank;
 
   GachaPackLevelConfig({
     required this.level,
     required this.price,
+    required this.cardsPerPack,
     required this.guaranteedMinRank,
   });
 
@@ -23,6 +25,7 @@ class GachaPackLevelConfig {
     return GachaPackLevelConfig(
       level: json['level'] as int,
       price: json['price'] as int,
+      cardsPerPack: json['cards_per_pack'] as int,
       guaranteedMinRank: raw == null ? null : CardRankApi.fromApiValue(raw),
     );
   }

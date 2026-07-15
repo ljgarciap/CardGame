@@ -11,11 +11,13 @@ class PackLevelOut(BaseModel):
 
     level: int
     price: int
+    cards_per_pack: int
     guaranteed_min_rank: Optional[Rank]
 
 
 class PackLevelUpdateRequest(BaseModel):
     price: int
+    cards_per_pack: int
     guaranteed_min_rank: Optional[Rank] = None
 
 

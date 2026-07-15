@@ -129,6 +129,7 @@ class _LevelConfigSection extends StatefulWidget {
 
 class _LevelConfigSectionState extends State<_LevelConfigSection> {
   late final TextEditingController _priceController;
+  late final TextEditingController _cardsPerPackController;
   CardRank? _guaranteedMinRank;
 
   late final TextEditingController _heroController;
@@ -155,6 +156,7 @@ class _LevelConfigSectionState extends State<_LevelConfigSection> {
   void initState() {
     super.initState();
     _priceController = TextEditingController(text: widget.level.price.toString());
+    _cardsPerPackController = TextEditingController(text: widget.level.cardsPerPack.toString());
     _guaranteedMinRank = widget.level.guaranteedMinRank;
 
     _heroController = TextEditingController(text: widget.rankProbabilities.hero);
@@ -175,6 +177,7 @@ class _LevelConfigSectionState extends State<_LevelConfigSection> {
   @override
   void dispose() {
     _priceController.dispose();
+    _cardsPerPackController.dispose();
     for (final c in [..._rankControllers, ..._rarityControllers]) {
       c.dispose();
     }
@@ -194,6 +197,7 @@ class _LevelConfigSectionState extends State<_LevelConfigSection> {
       await widget.repository.updatePackLevel(
         level: widget.level.level,
         price: int.parse(_priceController.text),
+        cardsPerPack: int.parse(_cardsPerPackController.text),
         guaranteedMinRank: _guaranteedMinRank,
       );
       await widget.repository.updateRankProbabilities(
@@ -244,6 +248,12 @@ class _LevelConfigSectionState extends State<_LevelConfigSection> {
                   controller: _priceController,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(labelText: 'Precio (coins)'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _cardsPerPackController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Cartas por sobre'),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<CardRank?>(

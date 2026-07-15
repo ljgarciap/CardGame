@@ -18,6 +18,7 @@ class GachaConfigRemoteDatasource extends BaseRemoteDatasource {
     required String token,
     required int level,
     required int price,
+    required int cardsPerPack,
     required CardRank? guaranteedMinRank,
   }) async {
     final response = await client.put(
@@ -25,6 +26,7 @@ class GachaConfigRemoteDatasource extends BaseRemoteDatasource {
       headers: authHeaders(token),
       body: jsonEncode({
         'price': price,
+        'cards_per_pack': cardsPerPack,
         'guaranteed_min_rank': guaranteedMinRank?.apiValue,
       }),
     );
