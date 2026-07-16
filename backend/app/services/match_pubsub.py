@@ -15,7 +15,7 @@ def _channel(match_id: UUID) -> str:
 
 
 async def publish_match_update(match: Match) -> None:
-    client = get_redis_client()
+    client = await get_redis_client()
     await client.publish(_channel(match.id), match.model_dump_json())
 
 
@@ -25,7 +25,7 @@ async def subscribe(match_id: UUID):
     y ANTES de dejar que el jugador dispare cualquier acción propia, para no
     perder un `publish` que ocurra en esa ventana (ver mismo razonamiento en
     user_notify.subscribe_user)."""
-    client = get_redis_client()
+    client = await get_redis_client()
     pubsub = client.pubsub()
     await pubsub.subscribe(_channel(match_id))
     return pubsub

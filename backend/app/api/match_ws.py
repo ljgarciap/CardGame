@@ -14,12 +14,12 @@ import uuid
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
-from app.core.security import decode_access_token
-from app.db.session import get_db
+from app.api import deps
+from app.db.session import SessionLocal
 from app.models.card_archetype import CardArchetype
 from app.models.player_card import PlayerCard
 from app.models.user import User
@@ -43,21 +43,23 @@ _local_connections: dict[UUID, WebSocket] = {}
 _local_match_ids: dict[UUID, UUID] = {}
 
 
-async def _authenticate(websocket: WebSocket, db: Session) -> Optional[User]:
+def _load_user_sync(token: str) -> Optional[User]:
+    with SessionLocal() as db:
+        return deps.resolve_user_by_token(db, token)
+
+
+async def _authenticate(websocket: WebSocket) -> Optional[User]:
+    """Abre su propia sesión de DB de vida corta (vía threadpool, ver
+    _load_user_sync) en vez de recibir una inyectada por la conexión
+    entera — no hay razón para tener una sesión reservada del pool durante
+    toda la partida por una consulta que solo corre una vez, al conectar."""
     token = websocket.query_params.get("token")
     if not token:
         return None
-    user_id_str = decode_access_token(token)
-    if user_id_str is None:
-        return None
-    try:
-        user_uuid = uuid.UUID(user_id_str)
-    except ValueError:
-        return None
-    return db.execute(select(User).where(User.id == user_uuid)).scalar_one_or_none()
+    return await run_in_threadpool(_load_user_sync, token)
 
 
-def _resolve_deck(db: Session, user: User, raw_deck: list) -> list[CardInPlay]:
+def _resolve_deck_sync(user_id: UUID, raw_deck: list) -> list[CardInPlay]:
     try:
         player_card_ids = [uuid.UUID(str(cid)) for cid in raw_deck]
     except (ValueError, TypeError, AttributeError):
@@ -66,11 +68,12 @@ def _resolve_deck(db: Session, user: User, raw_deck: list) -> list[CardInPlay]:
     if len(player_card_ids) != DECK_SIZE or len(set(player_card_ids)) != DECK_SIZE:
         raise MatchRuleViolation(f"el mazo debe tener exactamente {DECK_SIZE} cartas distintas")
 
-    rows = db.execute(
-        select(PlayerCard, CardArchetype)
-        .join(CardArchetype, PlayerCard.archetype_id == CardArchetype.id)
-        .where(PlayerCard.id.in_(player_card_ids), PlayerCard.user_id == user.id)
-    ).all()
+    with SessionLocal() as db:
+        rows = db.execute(
+            select(PlayerCard, CardArchetype)
+            .join(CardArchetype, PlayerCard.archetype_id == CardArchetype.id)
+            .where(PlayerCard.id.in_(player_card_ids), PlayerCard.user_id == user_id)
+        ).all()
     by_id = {player_card.id: (player_card, archetype) for player_card, archetype in rows}
     if len(by_id) != DECK_SIZE:
         raise MatchRuleViolation("alguna carta del mazo no existe o no te pertenece")
@@ -91,6 +94,15 @@ def _resolve_deck(db: Session, user: User, raw_deck: list) -> list[CardInPlay]:
             )
         )
     return cards
+
+
+async def _resolve_deck(user: User, raw_deck: list) -> list[CardInPlay]:
+    """Correr `db.execute` sync directo en el event loop del worker bloquea
+    la entrega de state_update/match_over a TODAS las demás conexiones que
+    ese mismo worker tiene abiertas mientras dura la consulta — por eso el
+    trabajo sync entero (abrir sesión, consultar, cerrar) va a un thread
+    aparte vía `run_in_threadpool`, no directo en la coroutine."""
+    return await run_in_threadpool(_resolve_deck_sync, user.id, raw_deck)
 
 
 async def _try_start_match() -> None:
@@ -120,11 +132,11 @@ async def _try_start_match() -> None:
         )
 
 
-async def _handle_queue(db: Session, user: User, raw_deck: list, websocket: WebSocket) -> None:
+async def _handle_queue(user: User, raw_deck: list, websocket: WebSocket) -> None:
     if user.id in _local_match_ids:
         raise MatchRuleViolation("ya estás en una partida")
 
-    cards = _resolve_deck(db, user, raw_deck)
+    cards = await _resolve_deck(user, raw_deck)
     await matchmaking.enqueue(
         matchmaking.QueueEntry(user_id=user.id, username=user.username, deck=cards)
     )
@@ -224,8 +236,8 @@ async def _resolve_disconnect(user_id: UUID) -> None:
 
 
 @router.websocket("/ws/match")
-async def match_websocket(websocket: WebSocket, db: Session = Depends(get_db)):
-    user = await _authenticate(websocket, db)
+async def match_websocket(websocket: WebSocket):
+    user = await _authenticate(websocket)
     if user is None:
         # Rechazar el handshake sin aceptar: el cliente ve el connect fallar
         # en vez de una conexión abierta que se cierra sola al instante.
@@ -258,7 +270,7 @@ async def match_websocket(websocket: WebSocket, db: Session = Depends(get_db)):
 
             try:
                 if action == "queue":
-                    await _handle_queue(db, user, raw.get("deck", []), websocket)
+                    await _handle_queue(user, raw.get("deck", []), websocket)
                 elif action == "leave_queue":
                     await matchmaking.leave_queue(user.id)
                 elif action in ("play_card", "attack", "end_turn", "forfeit"):

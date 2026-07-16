@@ -5,7 +5,7 @@ import pytest
 
 from app.models.enums import Faction, Rank, Rarity
 from app.services.match_engine import CardInPlay, Match, MatchPlayerState
-from app.services.match_pubsub import listen, publish_match_update
+from app.services.match_pubsub import consume, listen, publish_match_update, subscribe
 
 
 def _make_match() -> Match:
@@ -75,6 +75,31 @@ async def test_subscribers_do_not_receive_updates_from_other_matches():
 
     assert len(received) == 1
     assert received[0].id == match_a.id
+
+
+@pytest.mark.asyncio
+async def test_subscribe_then_consume_is_the_pattern_match_ws_actually_uses():
+    """match_ws.py NUNCA llama a listen() — siempre hace subscribe() primero
+    (confirmado con await), hace otro trabajo (leer el snapshot inicial,
+    mandar match_found) y recién después arranca a consumir. listen() solo
+    lo ejercitan los demás tests de este archivo, así que una regresión que
+    reordene subscribe/trabajo-intermedio en match_ws.py no la agarraría
+    ningún test unitario si este no existiera."""
+    match = _make_match()
+
+    pubsub = await subscribe(match.id)
+    # "otro trabajo" real entre el subscribe confirmado y el consume, tal
+    # como hace match_ws.py — si el subscribe no estuviera confirmado antes
+    # de este punto, este publish se perdería para siempre.
+    await publish_match_update(match)
+
+    received = None
+    async for received_match in consume(pubsub):
+        received = received_match
+        break
+
+    assert received is not None
+    assert received.id == match.id
 
 
 @pytest.mark.asyncio

@@ -14,9 +14,9 @@ def _make_entry(username: str = "player") -> QueueEntry:
 
 @pytest_asyncio.fixture(autouse=True)
 async def _clean_queue():
-    await get_redis_client().delete(_QUEUE_KEY)
+    await (await get_redis_client()).delete(_QUEUE_KEY)
     yield
-    await get_redis_client().delete(_QUEUE_KEY)
+    await (await get_redis_client()).delete(_QUEUE_KEY)
 
 
 @pytest.mark.asyncio
@@ -46,7 +46,7 @@ async def test_try_pair_removes_paired_players_from_queue():
 
     await try_pair()
 
-    assert await get_redis_client().llen(_QUEUE_KEY) == 0
+    assert await (await get_redis_client()).llen(_QUEUE_KEY) == 0
 
 
 @pytest.mark.asyncio
@@ -59,7 +59,7 @@ async def test_leave_queue_removes_only_that_player():
     removed = await leave_queue(a.user_id)
 
     assert removed is True
-    assert await get_redis_client().llen(_QUEUE_KEY) == 1
+    assert await (await get_redis_client()).llen(_QUEUE_KEY) == 1
     remaining = await try_pair()
     assert remaining is None  # solo queda bob, no alcanza para emparejar
 
@@ -96,8 +96,8 @@ async def test_leave_queue_is_atomic_against_concurrent_try_pair():
             # leave_queue ganó la carrera: victim debe haber sido sacado
             # efectivamente, y partner debe seguir solo en la cola.
             assert left is True
-            assert await get_redis_client().llen(_QUEUE_KEY) == 1
-            await get_redis_client().delete(_QUEUE_KEY)
+            assert await (await get_redis_client()).llen(_QUEUE_KEY) == 1
+            await (await get_redis_client()).delete(_QUEUE_KEY)
 
 
 @pytest.mark.asyncio

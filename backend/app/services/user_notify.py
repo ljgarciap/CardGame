@@ -20,7 +20,7 @@ def _channel(user_id: UUID) -> str:
 
 
 async def notify_user(user_id: UUID, payload: dict[str, Any]) -> None:
-    client = get_redis_client()
+    client = await get_redis_client()
     await client.publish(_channel(user_id), json.dumps(payload))
 
 
@@ -34,7 +34,7 @@ async def subscribe_user(user_id: UUID):
     una ventana real donde el `publish` ocurre antes de que el `subscribe`
     haya ido y vuelto de Redis, y el mensaje se pierde para siempre (Redis
     Pub/Sub no encola nada para quien todavía no está suscripto)."""
-    client = get_redis_client()
+    client = await get_redis_client()
     pubsub = client.pubsub()
     await pubsub.subscribe(_channel(user_id))
     return pubsub

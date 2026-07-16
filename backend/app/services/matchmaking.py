@@ -54,14 +54,14 @@ class QueueEntry(BaseModel):
 
 
 async def enqueue(entry: QueueEntry) -> None:
-    client = get_redis_client()
+    client = await get_redis_client()
     await client.lpush(_QUEUE_KEY, entry.model_dump_json())
 
 
 async def leave_queue(user_id: UUID) -> bool:
     """Busca y saca a este usuario de la cola, si todavía está esperando.
     Devuelve True si lo encontró y sacó. Atómico (ver _LEAVE_QUEUE_SCRIPT)."""
-    client = get_redis_client()
+    client = await get_redis_client()
     removed = await client.eval(_LEAVE_QUEUE_SCRIPT, 1, _QUEUE_KEY, str(user_id))
     return bool(removed)
 
@@ -70,7 +70,7 @@ async def try_pair() -> Optional[tuple[QueueEntry, QueueEntry]]:
     """Si hay 2 o más jugadores en cola, saca a los primeros 2 de forma
     atómica y los devuelve emparejados (orden FIFO puro, sin ELO ni
     prioridad). Si no hay suficientes, devuelve None sin tocar la cola."""
-    client = get_redis_client()
+    client = await get_redis_client()
     result = await client.eval(_TRY_PAIR_SCRIPT, 1, _QUEUE_KEY)
     if not result:
         return None

@@ -33,10 +33,9 @@ async def _setup_redis():
     en `match_queue` y emparejarse con un jugador real de una corrida nueva,
     con un user_id que ya no corresponde a nadie conectado (bug real que
     causó un hang silencioso en test_match_ws.py)."""
-    client = get_redis_client()
-    await client.flushdb()
+    await (await get_redis_client()).flushdb()
     yield
-    await client.flushdb()
+    await (await get_redis_client()).flushdb()
 
 
 @pytest.fixture

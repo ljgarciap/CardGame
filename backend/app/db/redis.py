@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 from typing import Optional
 
 import redis.asyncio as redis
@@ -9,7 +10,7 @@ _redis_client: Optional[redis.Redis] = None
 _redis_client_loop: Optional[asyncio.AbstractEventLoop] = None
 
 
-def get_redis_client() -> redis.Redis:
+async def get_redis_client() -> redis.Redis:
     """Singleton lazy y atado al event loop que lo pide — NO alcanza con
     crearlo perezoso una sola vez (ver historia abajo), también hay que
     reconstruirlo si cambia el loop en el que se lo pide.
@@ -31,10 +32,24 @@ def get_redis_client() -> redis.Redis:
     `asyncio.run()` más de una vez reusando este módulo) pisaría el mismo
     bug en producción. Por eso: si el loop que está pidiendo el cliente
     cambió respecto al que lo construyó, se reconstruye.
+
+    Tercer hallazgo (revisión Senior Reviewer sobre el segundo fix): al
+    reconstruir, el cliente viejo se descartaba sin cerrar su connection
+    pool — fuga de conexiones en cada cambio de loop (cada test con
+    TestClient, por ejemplo). Por eso esta función es ahora `async def`:
+    cerrar de verdad el cliente viejo requiere `await`, así que ya no
+    alcanza con una función sync — todos los callers pasan a hacer
+    `await get_redis_client()`.
     """
     global _redis_client, _redis_client_loop
     current_loop = asyncio.get_running_loop()
     if _redis_client is None or _redis_client_loop is not current_loop:
+        if _redis_client is not None:
+            # Best-effort: el loop viejo puede ya estar cerrado (ej. el
+            # portal de un test anterior ya se destruyó) — no dejamos que
+            # una falla acá impida construir el cliente nuevo.
+            with contextlib.suppress(Exception):
+                await _redis_client.aclose()
         _redis_client = redis.from_url(settings.redis_url, decode_responses=True)
         _redis_client_loop = current_loop
     return _redis_client

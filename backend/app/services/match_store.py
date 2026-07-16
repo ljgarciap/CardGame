@@ -24,12 +24,12 @@ def _match_key(match_id: UUID) -> str:
 
 
 async def save_match(match: Match) -> None:
-    client = get_redis_client()
+    client = await get_redis_client()
     await client.set(_match_key(match.id), match.model_dump_json(), ex=_MATCH_TTL_SECONDS)
 
 
 async def load_match(match_id: UUID) -> Optional[Match]:
-    client = get_redis_client()
+    client = await get_redis_client()
     raw = await client.get(_match_key(match_id))
     if raw is None:
         return None
@@ -37,7 +37,7 @@ async def load_match(match_id: UUID) -> Optional[Match]:
 
 
 async def delete_match(match_id: UUID) -> None:
-    client = get_redis_client()
+    client = await get_redis_client()
     await client.delete(_match_key(match_id))
 
 
@@ -48,7 +48,8 @@ async def match_lock(match_id: UUID) -> AsyncIterator[None]:
     compiten por la misma partida. Sin esto, dos acciones concurrentes
     sobre la misma partida desde workers distintos podrían pisarse
     (el segundo save_match sobreescribe al primero sin verlo)."""
-    lock = Lock(get_redis_client(), f"{_LOCK_KEY_PREFIX}{match_id}", timeout=10)
+    client = await get_redis_client()
+    lock = Lock(client, f"{_LOCK_KEY_PREFIX}{match_id}", timeout=10)
     acquired = await lock.acquire(blocking=True, blocking_timeout=5)
     if not acquired:
         raise TimeoutError(f"no se pudo tomar el lock de la partida {match_id}")
