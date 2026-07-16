@@ -110,3 +110,53 @@ Primera feature nueva de gameplay real (no gacha/auth). No existía spec de regl
   - **Alta severidad**: (1) `leave_queue` no era atómico (LRANGE+LREM en dos viajes) y podía perder la carrera contra el `RPOP` atómico de `try_pair`, emparejando a un jugador que se estaba desconectando y dejando al rival esperando una jugada que nunca llega — fix: `leave_queue` también es un script Lua atómico ahora (usa `cjson.decode` para buscar por `user_id` dentro del script). (2) La misma clase de carrera cancelación-vs-limpieza-async que se había corregido solo en el test de desconexión seguía viva en el propio endpoint (`forward_task.cancel()` sin esperar antes de que `_resolve_disconnect` hiciera su propio I/O) — fix: se espera la cancelación antes de limpiar. (3) Sin guard contra re-encolar estando ya en partida — fix: `_handle_queue` rechaza con `MatchRuleViolation` si el user ya tiene un `match_id` local. (4) Un mensaje de cliente no-JSON o JSON-no-objeto tiraba la conexión entera — fix: se atrapa y responde error, la conexión sigue viva. De paso se agregó el ack `{"type":"queued"}` que el protocolo documentado prometía y el servidor nunca mandaba.
   - **Media/baja**: fuga de conexiones Redis al reconstruir el cliente entre loops (`get_redis_client()` ahora es `async def`, cierra el cliente viejo con `aclose()` antes de reemplazarlo — obligó a actualizar todos los callers a `await`); llamadas síncronas a la DB bloqueando el event loop entero del worker (auth y resolución de mazo ahora corren en threadpool vía `run_in_threadpool`, con sesión de vida corta abierta y cerrada en el mismo hilo); sesión de DB inyectada por toda la conexión WebSocket aunque solo se usaba dos veces — se sacó `Depends(get_db)` del route, cada operación abre su propia sesión corta; gap de cobertura de tests (los unitarios de pub/sub solo ejercitaban el combinador viejo `listen()`/`listen_for_user()`, no el patrón de dos pasos `subscribe()`+`consume()` que usa producción — tests nuevos que cubren ese patrón); duplicación de la lógica de auth entre `match_ws._authenticate` y `deps.get_current_user` — extraído `deps.resolve_user_by_token()` compartido por los dos.
 - Verificado con la suite completa (137 passed + 1 skip, 3 corridas sin flakiness) y dos rondas más de la verificación end-to-end de 2 procesos tras cada tanda de fixes.
+
+## 2026-07-16 — Frontend del Real-time Server
+
+Ronda de PM separada, como estaba planeado. 10 tareas (#28-#37): un endpoint
+backend nuevo + 9 piezas de frontend.
+
+- **Backend — `GET /api/cards/mine`**: no existía ningún endpoint que
+  expusiera la colección completa de un usuario (solo se podía ABRIR sobres,
+  nunca LISTAR lo que ya se tiene) — el deck builder lo necesitaba para
+  elegir las 10 cartas del mazo. Mismo patrón que `GET /api/packs/levels`.
+- **`MatchWebSocketClient`**: primer uso real de WebSocket en la app
+  (`web_socket_channel` pasa de dependencia transitiva a directa). Sin
+  lógica de reconexión a propósito — el spec de juego define desconexión =
+  derrota inmediata.
+- **`CollectionRepository`/`OwnedCardEntity`**: primera vez que el frontend
+  expone la colección del jugador — no existía ni la entidad ni el
+  repositorio antes de esta ronda.
+- **`GameCardWidget`**: extraído del `_TCGCardWidget` que vivía duplicado
+  dentro de `pack_opening_page.dart` — ahora lo reusan esa pantalla, el
+  deck builder y el tablero de partida.
+- **`MatchNotifier`** (Riverpod, mismo patrón que `AuthNotifier`): modela
+  el ciclo completo `queue→queued→match_found→state_update→match_over`
+  como estado reactivo. Se le escribieron 11 tests unitarios con un
+  repositorio fake — **encontraron un bug real** antes de tocar un
+  browser: `ref.read()` no se puede llamar dentro de un callback de
+  `onDispose` (Riverpod lo prohíbe explícitamente), y el primer borrador
+  del notifier lo hacía para desconectar el WebSocket al destruirse. Fix:
+  capturar la referencia al repositorio ANTES de registrar el callback.
+- **DeckBuilderPage / MatchmakingPage / MatchPage**: selección de 10
+  cartas, pantalla de "buscando partida", y el tablero completo (mano,
+  tablero propio/rival, targeting de ataque cara-o-carta, terminar turno,
+  rendirse, diálogo de resultado ¡VICTORIA!/DERROTA).
+- **Verificación end-to-end real**: sin `chromium-cli` disponible en este
+  entorno, se armó un driver Playwright a mano (Node) contra un build real
+  de Flutter Web servido localmente + el backend real. Gotcha encontrado:
+  Flutter Web renderiza sobre `<canvas>` (CanvasKit) — no hay `<input>`/
+  texto real en el DOM, así que los selectores típicos de Playwright
+  (`fill`, `text=`) no sirven; hubo que interactuar por coordenadas de
+  mouse leídas de capturas de pantalla sucesivas. Con eso: dos usuarios
+  reales (`ui_alice`/`ui_bob`, 10 cartas cada uno) hicieron login, armaron
+  mazo, encolaron, matchmaking los emparejó, jugaron una carta, pasaron
+  turno, atacaron a la cara, y el diálogo de resultado apareció correcto
+  en los dos lados (`¡VICTORIA! / por vida a cero` en un lado, `DERROTA /
+  por vida a cero` en el otro) — con tráfico WebSocket real de punta a
+  punta, no mockeado.
+- `flutter analyze`: 0 errores nuevos (solo los `withOpacity` deprecados
+  que ya existían en el resto del proyecto). `flutter test`: 29 passed (18
+  preexistentes + 11 del `MatchNotifier`).
+- Con esto, el "qué falta" del real-time match queda: Senior Review del
+  frontend (el backend ya lo tuvo, ver entrada anterior) y push.

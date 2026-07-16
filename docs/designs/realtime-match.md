@@ -12,8 +12,12 @@ tabla de estimación están completas, con tests contra Postgres/Redis reales
 independientes (contenedores separados) compartiendo el mismo Redis, jugando
 una partida completa hasta la victoria. Dos bugs de concurrencia real
 encontrados y corregidos en el camino — ver "Redis async client" y "Testing
-WebSocket disconnect handling" en `docs/architecture.md`. Frontend (deck
-builder + pantallas de partida) sigue pendiente de una ronda de PM separada.
+WebSocket disconnect handling" en `docs/architecture.md`.
+
+Frontend: **implementado y verificado** (2026-07-16) — deck builder,
+matchmaking y tablero de partida completos, conectados al backend real.
+Verificado end-to-end en un browser real con dos usuarios jugando una
+partida completa hasta la victoria. Detalle en `docs/memory.md`.
 
 ## Decisiones de arquitectura
 
