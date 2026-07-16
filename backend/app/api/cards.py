@@ -1,13 +1,11 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
-from app.models.card_archetype import CardArchetype
-from app.models.player_card import PlayerCard
 from app.models.user import User
 from app.schemas.collection import OwnedCardOut
+from app.services.card_ownership import load_owned_cards
 
 router = APIRouter(prefix="/api/cards", tags=["cards"])
 
@@ -29,13 +27,7 @@ def list_my_cards(
     """Colección completa del usuario autenticado — la usa el deck builder
     de partidas en tiempo real para elegir las 10 cartas del mazo antes de
     encolar (ver docs/designs/realtime-match.md)."""
-    rows = db.execute(
-        select(PlayerCard, CardArchetype)
-        .join(CardArchetype, PlayerCard.archetype_id == CardArchetype.id)
-        .where(PlayerCard.user_id == current_user.id)
-        .order_by(PlayerCard.obtained_at)
-        .limit(_MAX_CARDS_RETURNED)
-    ).all()
+    rows = load_owned_cards(db, current_user.id, limit=_MAX_CARDS_RETURNED)
     return [
         OwnedCardOut(
             player_card_id=player_card.id,

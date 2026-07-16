@@ -99,11 +99,17 @@ inmediatamente después — si hay 2+ en cola, empareja y crea la partida en
 ese momento (no hace falta un proceso "matchmaker" separado corriendo en
 loop).
 
-### Deck: no hay tabla `decks`
-Sin cambios respecto al diseño original: elegir 10 cartas antes de la
-partida, no un mazo guardado para reusar (fuera de alcance en el spec). La
-lista de `player_card_id` viaja en el mensaje de `queue` y termina como
-parte del JSON de la partida en Redis — no hay tabla nueva en Postgres.
+### Deck: elegir 10 cartas antes de la partida
+La lista de `player_card_id` viaja en el mensaje de `queue` y termina como
+parte del JSON de la partida en Redis — el protocolo WebSocket no cambia.
+
+**Actualización (2026-07-16)**: "mazos guardados" estaba fuera de alcance en
+el spec original — Luis pidió agregarlo como ronda de PM separada. Sí hay
+tabla nueva en Postgres ahora (`decks` + `deck_cards`, ver
+`docs/memory.md` 2026-07-16 continuación 3): pura gestión de qué 10
+`player_card_id` arma cada mazo con nombre, no toca el motor de partida — al
+encolar, el cliente igual manda la lista de `player_card_id` explícita en el
+`queue`, tomada de un mazo guardado en vez de una selección ad-hoc.
 
 ### Auth del WebSocket: JWT por query param
 Sin cambios: `wss://.../ws/match?token=<jwt>` — los WebSocket de browser no

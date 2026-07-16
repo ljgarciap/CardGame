@@ -13,6 +13,7 @@ from app.models import user as _user  # noqa: F401 registers User on Base.metada
 from app.models import card_archetype as _card_archetype  # noqa: F401
 from app.models import player_card as _player_card  # noqa: F401
 from app.models import gacha_config as _gacha_config  # noqa: F401
+from app.models import deck as _deck  # noqa: F401
 
 engine = create_engine(settings.database_url)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

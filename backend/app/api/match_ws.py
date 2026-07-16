@@ -15,15 +15,13 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from sqlalchemy import select
 from starlette.concurrency import run_in_threadpool
 
 from app.api import deps
 from app.db.session import SessionLocal
-from app.models.card_archetype import CardArchetype
-from app.models.player_card import PlayerCard
 from app.models.user import User
 from app.services import match_pubsub, match_store, matchmaking, user_notify
+from app.services.card_ownership import load_owned_cards
 from app.services.match_engine import (
     DECK_SIZE,
     CardInPlay,
@@ -69,11 +67,7 @@ def _resolve_deck_sync(user_id: UUID, raw_deck: list) -> list[CardInPlay]:
         raise MatchRuleViolation(f"el mazo debe tener exactamente {DECK_SIZE} cartas distintas")
 
     with SessionLocal() as db:
-        rows = db.execute(
-            select(PlayerCard, CardArchetype)
-            .join(CardArchetype, PlayerCard.archetype_id == CardArchetype.id)
-            .where(PlayerCard.id.in_(player_card_ids), PlayerCard.user_id == user_id)
-        ).all()
+        rows = load_owned_cards(db, user_id, player_card_ids=player_card_ids)
     by_id = {player_card.id: (player_card, archetype) for player_card, archetype in rows}
     if len(by_id) != DECK_SIZE:
         raise MatchRuleViolation("alguna carta del mazo no existe o no te pertenece")
