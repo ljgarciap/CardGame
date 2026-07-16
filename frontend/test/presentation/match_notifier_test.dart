@@ -129,6 +129,59 @@ void main() {
     expect(container.read(matchNotifierProvider).phase, MatchPhase.idle);
   });
 
+  test('leaveAndReset manda leave_queue si todavía está en cola', () async {
+    await container.read(matchNotifierProvider.notifier).startQueue(['a']);
+    repository.emit({'type': 'queued'});
+    await Future.delayed(Duration.zero);
+
+    await container.read(matchNotifierProvider.notifier).leaveAndReset();
+
+    expect(repository.calls, contains('leaveQueue()'));
+  });
+
+  test('leaveAndReset NO manda leave_queue si ya está en una partida', () async {
+    await container.read(matchNotifierProvider.notifier).startQueue(['a']);
+    repository.emit({'type': 'state_update', 'state': _minimalState()});
+    await Future.delayed(Duration.zero);
+
+    await container.read(matchNotifierProvider.notifier).leaveAndReset();
+
+    expect(repository.calls, isNot(contains('leaveQueue()')));
+  });
+
+  test('dos errores consecutivos con el mismo texto son eventos distintos (errorNonce)', () async {
+    await container.read(matchNotifierProvider.notifier).startQueue(['a']);
+    repository.emit({'type': 'error', 'detail': 'no es tu turno'});
+    await Future.delayed(Duration.zero);
+    final firstNonce = container.read(matchNotifierProvider).errorNonce;
+
+    repository.emit({'type': 'error', 'detail': 'no es tu turno'});
+    await Future.delayed(Duration.zero);
+    final secondNonce = container.read(matchNotifierProvider).errorNonce;
+
+    expect(secondNonce, isNot(firstNonce));
+  });
+
+  test('un mensaje con forma inesperada no crashea, pasa a fatalError', () async {
+    await container.read(matchNotifierProvider.notifier).startQueue(['a']);
+    repository.emit({'type': 'state_update', 'state': 'no-es-un-mapa'});
+    await Future.delayed(Duration.zero);
+
+    expect(container.read(matchNotifierProvider).phase, MatchPhase.fatalError);
+  });
+
+  test('cierre con código 4401 (token vencido) da un mensaje específico', () async {
+    repository.lastCloseCodeToReturn = 4401;
+    await container.read(matchNotifierProvider.notifier).startQueue(['a']);
+
+    repository.emitDone();
+    await Future.delayed(Duration.zero);
+
+    final state = container.read(matchNotifierProvider);
+    expect(state.phase, MatchPhase.fatalError);
+    expect(state.errorMessage, contains('sesión'));
+  });
+
   test('playCard/attackFace/attackCard/endTurn/forfeit delegan al repositorio', () {
     final notifier = container.read(matchNotifierProvider.notifier);
 

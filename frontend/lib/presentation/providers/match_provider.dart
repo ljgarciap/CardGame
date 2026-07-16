@@ -17,6 +17,13 @@ class MatchUiState {
   final String? matchOverReason;
   final String? errorMessage;
 
+  /// Se incrementa en cada mensaje `error` del servidor, incluso si el
+  /// texto es idéntico al anterior — sin esto, dos rechazos consecutivos
+  /// con el mismo `detail` (ej. tocar dos veces una acción inválida) se ven
+  /// como "el mismo" error para un listener que compara por igualdad de
+  /// `errorMessage`, y el segundo aviso nunca se muestra.
+  final int errorNonce;
+
   const MatchUiState({
     this.phase = MatchPhase.idle,
     this.opponentUsername,
@@ -24,6 +31,7 @@ class MatchUiState {
     this.winnerUserId,
     this.matchOverReason,
     this.errorMessage,
+    this.errorNonce = 0,
   });
 
   /// `errorMessage` es intencionalmente el único campo que SIEMPRE se
@@ -39,6 +47,7 @@ class MatchUiState {
     String? winnerUserId,
     String? matchOverReason,
     String? errorMessage,
+    int? errorNonce,
   }) {
     return MatchUiState(
       phase: phase ?? this.phase,
@@ -47,6 +56,7 @@ class MatchUiState {
       winnerUserId: winnerUserId ?? this.winnerUserId,
       matchOverReason: matchOverReason ?? this.matchOverReason,
       errorMessage: errorMessage,
+      errorNonce: errorNonce ?? this.errorNonce,
     );
   }
 }
@@ -81,7 +91,15 @@ class MatchNotifier extends Notifier<MatchUiState> {
         onError: (_) => _fail('Se perdió la conexión con el servidor.'),
         onDone: () {
           if (state.phase != MatchPhase.over) {
-            _fail('La conexión se cerró inesperadamente.');
+            // Un cierre con código 4401 es el servidor rechazando el JWT
+            // (vencido o inválido) al conectar — mensaje específico en vez
+            // del genérico, para que el jugador sepa que tiene que volver a
+            // iniciar sesión en vez de solo "reintentar".
+            _fail(
+              _repository.lastCloseCode == 4401
+                  ? 'Tu sesión expiró. Iniciá sesión de nuevo.'
+                  : 'La conexión se cerró inesperadamente.',
+            );
           }
         },
       );
@@ -94,32 +112,44 @@ class MatchNotifier extends Notifier<MatchUiState> {
   }
 
   void _handleMessage(Map<String, dynamic> message) {
-    switch (message['type']) {
-      case 'queued':
-        state = state.copyWith(phase: MatchPhase.queued);
-        break;
-      case 'match_found':
-        state = state.copyWith(
-          phase: MatchPhase.matchFound,
-          opponentUsername: message['opponent_username'] as String,
-        );
-        break;
-      case 'state_update':
-        state = state.copyWith(
-          phase: MatchPhase.inProgress,
-          state: MatchStateEntity.fromJson(message['state'] as Map<String, dynamic>),
-        );
-        break;
-      case 'match_over':
-        state = state.copyWith(
-          phase: MatchPhase.over,
-          winnerUserId: message['winner_user_id'] as String?,
-          matchOverReason: message['reason'] as String?,
-        );
-        break;
-      case 'error':
-        state = state.copyWith(errorMessage: message['detail'] as String?);
-        break;
+    // Un mensaje del servidor con una forma inesperada (campo faltante,
+    // tipo distinto) no debe tirar una excepción no capturada — Dart NO
+    // rutea las excepciones sincrónicas de `onData` al `onError` de la
+    // misma suscripción, así que sin este try/catch la UI queda colgada
+    // para siempre sin ningún error visible.
+    try {
+      switch (message['type']) {
+        case 'queued':
+          state = state.copyWith(phase: MatchPhase.queued);
+          break;
+        case 'match_found':
+          state = state.copyWith(
+            phase: MatchPhase.matchFound,
+            opponentUsername: message['opponent_username'] as String,
+          );
+          break;
+        case 'state_update':
+          state = state.copyWith(
+            phase: MatchPhase.inProgress,
+            state: MatchStateEntity.fromJson(message['state'] as Map<String, dynamic>),
+          );
+          break;
+        case 'match_over':
+          state = state.copyWith(
+            phase: MatchPhase.over,
+            winnerUserId: message['winner_user_id'] as String?,
+            matchOverReason: message['reason'] as String?,
+          );
+          break;
+        case 'error':
+          state = state.copyWith(
+            errorMessage: message['detail'] as String?,
+            errorNonce: state.errorNonce + 1,
+          );
+          break;
+      }
+    } catch (_) {
+      _fail('Se recibió un mensaje inválido del servidor.');
     }
   }
 
@@ -135,6 +165,13 @@ class MatchNotifier extends Notifier<MatchUiState> {
   void forfeit() => _repository.forfeit();
 
   Future<void> leaveAndReset() async {
+    // Si todavía estamos esperando en la cola (no en una partida), mandar
+    // el `leave_queue` explícito antes de cortar la conexión del todo —
+    // sin esto, ese camino del protocolo queda sin usar y "Cancelar"
+    // siempre depende de la desconexión implícita del servidor.
+    if (state.phase == MatchPhase.connecting || state.phase == MatchPhase.queued) {
+      _repository.leaveQueue();
+    }
     await _subscription?.cancel();
     _subscription = null;
     await _repository.disconnect();

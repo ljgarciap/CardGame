@@ -44,4 +44,9 @@ class FakeMatchRepository implements MatchRepository {
   Future<void> disconnect() async {
     disconnected = true;
   }
+
+  int? lastCloseCodeToReturn;
+
+  @override
+  int? get lastCloseCode => lastCloseCodeToReturn;
 }

@@ -19,6 +19,10 @@ class GameCardWidget extends StatelessWidget {
   final double width;
   final bool selected;
   final bool summoningSick;
+  /// Deshabilitada por una razón distinta a mareo de invocación (ej. ya
+  /// atacó este turno) — se atenúa igual que `summoningSick` pero SIN el
+  /// ícono de luna, para no comunicar el motivo equivocado.
+  final bool disabled;
   final VoidCallback? onTap;
 
   const GameCardWidget({
@@ -32,6 +36,7 @@ class GameCardWidget extends StatelessWidget {
     this.width = 250,
     this.selected = false,
     this.summoningSick = false,
+    this.disabled = false,
     this.onTap,
   });
 
@@ -59,7 +64,7 @@ class GameCardWidget extends StatelessWidget {
         clipBehavior: Clip.none,
         children: [
           Opacity(
-            opacity: summoningSick ? 0.55 : 1.0,
+            opacity: (summoningSick || disabled) ? 0.55 : 1.0,
             child: Container(
               width: width,
               decoration: BoxDecoration(
@@ -85,7 +90,7 @@ class GameCardWidget extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          rank.name.toUpperCase(),
+                          rank.displayLabel,
                           style: TextStyle(fontSize: 10 * scale, color: color, fontWeight: FontWeight.bold),
                         ),
                         FaIcon(FontAwesomeIcons.bolt, size: 12 * scale, color: color),

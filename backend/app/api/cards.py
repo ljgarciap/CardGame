@@ -11,6 +11,15 @@ from app.schemas.collection import OwnedCardOut
 
 router = APIRouter(prefix="/api/cards", tags=["cards"])
 
+# Sin límite ni paginación real todavía (el deck builder necesita ver la
+# colección entera para elegir 10 cartas, no una página a la vez) — esta
+# cota es solo defensiva, para que una colección patológicamente grande
+# (nada la limita hoy: abrir sobres no tiene tope más que el saldo) no
+# devuelva un response ilimitado. Si algún usuario real llega a este límite,
+# hace falta paginación de verdad (query params + scroll infinito en el
+# cliente), no subir el número.
+_MAX_CARDS_RETURNED = 500
+
 
 @router.get("/mine", response_model=list[OwnedCardOut])
 def list_my_cards(
@@ -25,6 +34,7 @@ def list_my_cards(
         .join(CardArchetype, PlayerCard.archetype_id == CardArchetype.id)
         .where(PlayerCard.user_id == current_user.id)
         .order_by(PlayerCard.obtained_at)
+        .limit(_MAX_CARDS_RETURNED)
     ).all()
     return [
         OwnedCardOut(

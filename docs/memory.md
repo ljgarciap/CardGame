@@ -160,3 +160,68 @@ backend nuevo + 9 piezas de frontend.
   preexistentes + 11 del `MatchNotifier`).
 - Con esto, el "qué falta" del real-time match queda: Senior Review del
   frontend (el backend ya lo tuvo, ver entrada anterior) y push.
+
+## 2026-07-16 (continuación 2) — Senior Review del frontend
+
+Mismo proceso que el backend (`/code-review`, 8 ángulos + verificación) sobre
+los 3 commits del frontend. 10 hallazgos confirmados, decisión de Luis:
+corregir los 10 antes de pushear.
+
+- **El más grave**: `GameCardWidget` en `deck_builder_page.dart` se llamaba
+  sin pasar `width:`, así que caía en su default de 250px — en la grilla de
+  2 columnas de un celular real (~160-190px de ancho de celda) cada carta
+  desbordaba. La verificación end-to-end de la entrada anterior corrió en un
+  browser desktop de 1280px, lo bastante ancho para que esto nunca se viera.
+  Fix: `LayoutBuilder` calcula el ancho real de la celda y se lo pasa al
+  widget. **Reverificado con Playwright en un viewport de 390px (iPhone)**:
+  las cartas ahora entran perfectas en la grilla.
+- Una excepción al parsear un mensaje del servidor en `_handleMessage` no la
+  agarraba `onError` de la suscripción (Dart no rutea excepciones sync de
+  `onData` a `onError`) — dejaba la UI colgada sin ningún error visible. Fix:
+  try/catch alrededor del switch, cae a `fatalError` con mensaje.
+  Test nuevo que manda un `state` con forma inválida y confirma la
+  transición.
+- La carta atacante seleccionada no se limpiaba al terminar turno ni se
+  gateaba por `yourTurn` — quedaba "armada" contra el rival en el turno de
+  él. Fix: gate por `yourTurn` + que la carta siga en el tablero, y limpieza
+  explícita al tocar "Terminar turno".
+- `MatchWebSocketClient.connect()` pisaba la conexión anterior sin cerrarla
+  (fuga en doble-conexión) y `close()` corría una carrera real con un
+  re-encolado rápido (podía anular la referencia a la conexión NUEVA). Fix:
+  cerrar la vieja antes de reemplazar, y en `close()` solo limpiar la
+  referencia si sigue siendo la misma instancia que se estaba cerrando
+  (`identical`).
+- Dos errores idénticos consecutivos del servidor no volvían a mostrar el
+  SnackBar (el listener comparaba por igualdad de texto). Fix: `errorNonce`
+  nuevo en `MatchUiState`, se incrementa en cada mensaje `error` sin importar
+  el texto — el listener compara por nonce, no por contenido.
+- `rank.name.toUpperCase()` en un enum Dart camelCase (`minorGod`) da
+  "MINORGOD" sin espacio. Fix: `CardRankDisplay.displayLabel` nuevo en
+  `card.dart`, separado de `CardRankApi` (que es para serialización, no
+  display).
+- `leaveQueue()` estaba completamente implementado de punta a punta pero
+  nunca se llamaba — "Cancelar" en matchmaking siempre desconectaba del todo
+  en vez de solo salir de la cola. Fix: `leaveAndReset()` manda `leaveQueue()`
+  primero si la fase es `connecting`/`queued`.
+- Tocar una carta con mareo de invocación o que ya atacó no daba ningún
+  feedback — parecía que la app no respondía. Fix: SnackBar explicando el
+  motivo; se agregó un parámetro `disabled` a `GameCardWidget` separado de
+  `summoningSick` (mismo atenuado visual, sin el ícono de luna que sería
+  semánticamente incorrecto para "ya atacó").
+- Un token vencido/inválido se veía como "conexión perdida" genérico en vez
+  de avisar que había que volver a iniciar sesión. Fix: `closeCode` nuevo
+  expuesto de punta a punta (`WebSocketChannel.closeCode` → 
+  `MatchWebSocketClient` → `MatchRepository.lastCloseCode`) — si el cierre
+  fue código 4401 (rechazo de JWT del backend), mensaje específico de sesión
+  vencida.
+- `GET /api/cards/mine` sin límite — la apertura de sobres no tiene tope más
+  que el saldo, así que la colección puede crecer sin cota. Fix defensivo:
+  `.limit(500)` (no es paginación real — el deck builder necesita ver toda
+  la colección para elegir 10 cartas — solo evita un response verdaderamente
+  ilimitado; si algún usuario real llega a este techo, hace falta paginación
+  de verdad, no subir el número).
+- Verificado: `flutter analyze` (0 errores nuevos), `flutter test` (34
+  passed, 5 nuevos), suite backend completa (140 passed + 1 skip), y una
+  segunda vuelta de la verificación end-to-end con Playwright — esta vez
+  agregando específicamente un viewport de celular real para confirmar el
+  fix del desborde.

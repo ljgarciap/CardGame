@@ -18,10 +18,23 @@ class _MatchPageState extends ConsumerState<MatchPage> {
 
   void _selectAttacker(CardInPlayEntity card, bool yourTurn) {
     if (!yourTurn) return;
-    if ((card.summoningSick ?? false) || (card.hasAttackedThisTurn ?? false)) return;
+    if (card.summoningSick ?? false) {
+      _showBriefMessage('Esa carta tiene mareo de invocación — no puede atacar todavía.');
+      return;
+    }
+    if (card.hasAttackedThisTurn ?? false) {
+      _showBriefMessage('Esa carta ya atacó este turno.');
+      return;
+    }
     setState(() {
       _selectedAttackerId = _selectedAttackerId == card.playerCardId ? null : card.playerCardId;
     });
+  }
+
+  void _showBriefMessage(String text) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(text), duration: const Duration(seconds: 2)),
+    );
   }
 
   void _attackFace() {
@@ -44,9 +57,13 @@ class _MatchPageState extends ConsumerState<MatchPage> {
     ref.read(matchNotifierProvider.notifier).playCard(card.playerCardId);
   }
 
-  void _leaveMatch() {
-    ref.read(matchNotifierProvider.notifier).leaveAndReset();
-    Navigator.of(context).pop();
+  Future<void> _leaveMatch() async {
+    // Esperar a que leaveAndReset() termine (cancela la suscripción y
+    // cierra la conexión) antes de salir de la pantalla — si no, un
+    // re-encolado rápido podría arrancar una conexión nueva mientras esta
+    // limpieza todavía está en vuelo.
+    await ref.read(matchNotifierProvider.notifier).leaveAndReset();
+    if (mounted) Navigator.of(context).pop();
   }
 
   void _showResultDialog(MatchUiState uiState) {
@@ -151,7 +168,16 @@ class _MatchPageState extends ConsumerState<MatchPage> {
   }
 
   Widget _buildBoard(MatchStateEntity state, MatchUiState uiState) {
-    final targeting = _selectedAttackerId != null;
+    // Gateado por yourTurn (no alcanza con limpiar _selectedAttackerId al
+    // terminar turno — el turno también puede cambiar por otras vías, ej.
+    // un state_update que llega mientras el jugador todavía no actuó) y
+    // por que la carta seleccionada siga realmente en el tablero (pudo
+    // haber sido destruida). Sin este doble chequeo, un ataque queda
+    // "armado" contra un rival fuera de turno o referenciando una carta
+    // que ya no existe.
+    final attackerStillOnBoard =
+        _selectedAttackerId != null && state.yourBoard.any((c) => c.playerCardId == _selectedAttackerId);
+    final targeting = attackerStillOnBoard && state.yourTurn;
 
     return Column(
       children: [
@@ -231,7 +257,12 @@ class _MatchPageState extends ConsumerState<MatchPage> {
             child: const Text('Rendirse', style: TextStyle(color: Colors.white38)),
           ),
           ElevatedButton(
-            onPressed: state.yourTurn ? () => ref.read(matchNotifierProvider.notifier).endTurn() : null,
+            onPressed: state.yourTurn
+                ? () {
+                    ref.read(matchNotifierProvider.notifier).endTurn();
+                    setState(() => _selectedAttackerId = null);
+                  }
+                : null,
             style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurpleAccent),
             child: const Text('Terminar turno'),
           ),
@@ -280,6 +311,7 @@ class _MatchPageState extends ConsumerState<MatchPage> {
               width: height * 0.68,
               selected: card.playerCardId == selectedId,
               summoningSick: card.summoningSick ?? false,
+              disabled: card.hasAttackedThisTurn ?? false,
               onTap: onTap == null ? null : () => onTap(card),
             ),
           );

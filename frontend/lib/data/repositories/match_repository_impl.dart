@@ -51,4 +51,7 @@ class MatchRepositoryImpl implements MatchRepository {
 
   @override
   Future<void> disconnect() => _client.close();
+
+  @override
+  int? get lastCloseCode => _client.closeCode;
 }

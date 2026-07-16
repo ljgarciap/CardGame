@@ -116,25 +116,42 @@ class _DeckBuilderPageState extends ConsumerState<DeckBuilderPage> {
                         );
                       }
 
-                      return GridView.builder(
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          childAspectRatio: 0.62,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                        ),
-                        itemCount: cards.length,
-                        itemBuilder: (context, index) {
-                          final card = cards[index];
-                          return GameCardWidget(
-                            name: card.name,
-                            faction: card.faction,
-                            rank: card.rank,
-                            rarity: card.rarity,
-                            attack: card.attack,
-                            defense: card.defense,
-                            selected: _selected.contains(card.playerCardId),
-                            onTap: () => _toggle(card.playerCardId),
+                      // GameCardWidget usa un ancho fijo (default 250) para
+                      // calcular su propio `scale` interno — sin pasarle el
+                      // ancho real de la celda, se renderiza a 250 sin
+                      // importar cuánto mida la grilla, y desborda en
+                      // cualquier pantalla angosta (el caso normal en
+                      // celular, no solo un extremo).
+                      return LayoutBuilder(
+                        builder: (context, constraints) {
+                          const crossAxisCount = 2;
+                          const crossAxisSpacing = 16.0;
+                          final cardWidth =
+                              (constraints.maxWidth - crossAxisSpacing * (crossAxisCount - 1)) /
+                                  crossAxisCount;
+
+                          return GridView.builder(
+                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: crossAxisCount,
+                              childAspectRatio: 0.62,
+                              crossAxisSpacing: crossAxisSpacing,
+                              mainAxisSpacing: 16,
+                            ),
+                            itemCount: cards.length,
+                            itemBuilder: (context, index) {
+                              final card = cards[index];
+                              return GameCardWidget(
+                                name: card.name,
+                                faction: card.faction,
+                                rank: card.rank,
+                                rarity: card.rarity,
+                                attack: card.attack,
+                                defense: card.defense,
+                                width: cardWidth,
+                                selected: _selected.contains(card.playerCardId),
+                                onTap: () => _toggle(card.playerCardId),
+                              );
+                            },
                           );
                         },
                       );

@@ -16,4 +16,8 @@ abstract class MatchRepository {
   void forfeit();
 
   Future<void> disconnect();
+
+  /// Código de cierre de la última conexión (ej. 4401 = el servidor
+  /// rechazó el JWT) — null si todavía no se cerró ninguna.
+  int? get lastCloseCode;
 }

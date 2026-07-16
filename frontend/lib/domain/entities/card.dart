@@ -54,6 +54,24 @@ extension CardRankApi on CardRank {
   }
 }
 
+/// Label legible para mostrar en UI — separado de [CardRankApi.apiValue]
+/// porque `rank.name.toUpperCase()` en un enum Dart camelCase (`minorGod`)
+/// da "MINORGOD" sin espacio, no "MINOR GOD".
+extension CardRankDisplay on CardRank {
+  String get displayLabel {
+    switch (this) {
+      case CardRank.hero:
+        return 'HERO';
+      case CardRank.demigod:
+        return 'DEMIGOD';
+      case CardRank.minorGod:
+        return 'MINOR GOD';
+      case CardRank.majorGod:
+        return 'MAJOR GOD';
+    }
+  }
+}
+
 class TCGCardEntity {
   final String id;
   final String name;
