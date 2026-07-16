@@ -1,6 +1,9 @@
+import threading
+
 from app.core.security import create_access_token, hash_password
 from app.models.card_archetype import CardArchetype
 from app.models.deck import Deck
+from app.models.deck_config import DeckConfig
 from app.models.enums import Faction, Rank, Rarity
 from app.models.player_card import PlayerCard
 from app.models.user import User
@@ -251,3 +254,39 @@ def test_create_deck_beyond_max_per_user_is_rejected(client, db_session):
         "/api/decks", headers=_auth_header(user), json={"name": "Mazo 21", "player_card_ids": ids}
     )
     assert response.status_code == 400
+
+
+def test_create_deck_concurrent_requests_never_exceed_max_per_user(client, db_session):
+    """Regresión del TOCTOU real de la revisión senior 793abf4: sin el lock
+    de fila sobre `User`, N requests concurrentes leen el mismo
+    `existing_count` antes de que cualquiera inserte, y todas pasan la
+    validación del tope. Con `max_decks_per_user=1` y 5 requests a la vez,
+    solo una debe poder crear el mazo."""
+    user = _create_user(db_session)
+    cards = _give_cards(db_session, user)
+    ids = [str(c.id) for c in cards]
+    db_session.add(DeckConfig(id=1, max_decks_per_user=1))
+    db_session.commit()
+
+    headers = _auth_header(user)
+    statuses: list[int] = []
+    lock = threading.Lock()
+
+    def _create(i: int) -> None:
+        response = client.post(
+            "/api/decks", headers=headers, json={"name": f"Mazo {i}", "player_card_ids": ids}
+        )
+        with lock:
+            statuses.append(response.status_code)
+
+    threads = [threading.Thread(target=_create, args=(i,)) for i in range(5)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert statuses.count(201) == 1
+    assert statuses.count(400) == 4
+
+    list_response = client.get("/api/decks", headers=headers)
+    assert len(list_response.json()) == 1

@@ -5,6 +5,7 @@ import '../../core/errors/api_exception.dart';
 import '../../domain/entities/owned_card.dart';
 import '../providers/collection_provider.dart';
 import '../providers/deck_provider.dart';
+import '../widgets/async_future_view.dart';
 import '../widgets/game_card_widget.dart';
 
 /// Tamaño de mazo — regla de juego fija (igual que `DECK_SIZE` en
@@ -73,13 +74,24 @@ class _DeckBuilderPageState extends ConsumerState<DeckBuilderPage> {
     });
   }
 
-  bool get _canSave => _selected.length == _deckSize && _nameController.text.trim().isNotEmpty;
+  bool get _canSave => _selected.length == _deckSize;
+
+  /// Nombre autogenerado si el jugador no escribió uno — guardar un mazo es
+  /// indispensable para jugar (el matchmaking parte de un mazo guardado),
+  /// pero no hay que obligar a pensar un nombre antes de poder jugar; se
+  /// puede renombrar después desde MyDecksPage.
+  String _autoDeckName() {
+    final now = DateTime.now();
+    String pad(int n) => n.toString().padLeft(2, '0');
+    return 'Mazo ${pad(now.day)}/${pad(now.month)} ${pad(now.hour)}:${pad(now.minute)}';
+  }
 
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
       final repository = ref.read(deckRepositoryProvider);
-      final name = _nameController.text.trim();
+      final typedName = _nameController.text.trim();
+      final name = typedName.isEmpty ? _autoDeckName() : typedName;
       if (widget.isEditing) {
         await repository.updateDeck(deckId: widget.deckId!, name: name, playerCardIds: _selected.toList());
       } else {
@@ -128,10 +140,9 @@ class _DeckBuilderPageState extends ConsumerState<DeckBuilderPage> {
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                 child: TextField(
                   controller: _nameController,
-                  onChanged: (_) => setState(() {}),
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
-                    labelText: 'Nombre del mazo',
+                    labelText: 'Nombre del mazo (opcional)',
                     labelStyle: const TextStyle(color: Colors.white54),
                     filled: true,
                     fillColor: Colors.white.withValues(alpha: 0.05),
@@ -145,35 +156,12 @@ class _DeckBuilderPageState extends ConsumerState<DeckBuilderPage> {
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                  child: FutureBuilder<List<OwnedCardEntity>>(
+                  child: AsyncFutureView<List<OwnedCardEntity>>(
                     future: _cardsFuture,
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState != ConnectionState.done) {
-                        return const Center(
-                          child: CircularProgressIndicator(color: Colors.deepPurpleAccent),
-                        );
-                      }
-                      if (snapshot.hasError) {
-                        final message = snapshot.error is ApiException
-                            ? (snapshot.error as ApiException).message
-                            : 'No se pudo cargar tu colección.';
-                        return Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                message,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(color: Colors.redAccent),
-                              ),
-                              const SizedBox(height: 16),
-                              ElevatedButton(onPressed: _reload, child: const Text('Reintentar')),
-                            ],
-                          ),
-                        );
-                      }
-
-                      final cards = snapshot.data!;
+                    onRetry: _reload,
+                    loadingColor: Colors.deepPurpleAccent,
+                    errorFallbackMessage: 'No se pudo cargar tu colección.',
+                    builder: (context, cards) {
                       if (cards.isEmpty) {
                         return const Center(
                           child: Text(

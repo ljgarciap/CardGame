@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/errors/api_exception.dart';
 import '../../domain/entities/saved_deck.dart';
 import '../providers/deck_provider.dart';
+import '../widgets/async_future_view.dart';
 import 'deck_builder_page.dart';
 import 'matchmaking_page.dart';
 
@@ -39,7 +40,7 @@ class _MyDecksPageState extends ConsumerState<MyDecksPage> {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (context) => const DeckBuilderPage()),
     );
-    _reload();
+    if (mounted) _reload();
   }
 
   Future<void> _edit(SavedDeckEntity deck) async {
@@ -52,7 +53,7 @@ class _MyDecksPageState extends ConsumerState<MyDecksPage> {
         ),
       ),
     );
-    _reload();
+    if (mounted) _reload();
   }
 
   Future<void> _delete(SavedDeckEntity deck) async {
@@ -78,11 +79,11 @@ class _MyDecksPageState extends ConsumerState<MyDecksPage> {
         ],
       ),
     );
-    if (confirmed != true) return;
+    if (confirmed != true || !mounted) return;
 
     try {
       await ref.read(deckRepositoryProvider).deleteDeck(deck.id);
-      await _reload();
+      if (mounted) await _reload();
     } on ApiException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
@@ -122,35 +123,12 @@ class _MyDecksPageState extends ConsumerState<MyDecksPage> {
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                  child: FutureBuilder<List<SavedDeckEntity>>(
+                  child: AsyncFutureView<List<SavedDeckEntity>>(
                     future: _decksFuture,
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState != ConnectionState.done) {
-                        return const Center(
-                          child: CircularProgressIndicator(color: Colors.deepPurpleAccent),
-                        );
-                      }
-                      if (snapshot.hasError) {
-                        final message = snapshot.error is ApiException
-                            ? (snapshot.error as ApiException).message
-                            : 'No se pudieron cargar tus mazos.';
-                        return Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                message,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(color: Colors.redAccent),
-                              ),
-                              const SizedBox(height: 16),
-                              ElevatedButton(onPressed: _reload, child: const Text('Reintentar')),
-                            ],
-                          ),
-                        );
-                      }
-
-                      final decks = snapshot.data!;
+                    onRetry: _reload,
+                    loadingColor: Colors.deepPurpleAccent,
+                    errorFallbackMessage: 'No se pudieron cargar tus mazos.',
+                    builder: (context, decks) {
                       if (decks.isEmpty) {
                         return Center(
                           child: Column(

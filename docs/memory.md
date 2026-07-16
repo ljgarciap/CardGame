@@ -296,3 +296,80 @@ nombre" (no solo recordar el último usado). 7 tareas (#38-44).
     `onChanged: (_) => setState(() {})`, recontruyendo toda la página
     (incluido el grid de cartas) en cada tecla, cuando solo el estado
     del botón Guardar necesita reaccionar al nombre.
+
+## 2026-07-16 (continuación 5) — Resolución de los 10 hallazgos de mazos guardados
+
+Daily con Analyst/Architect/PM: Luis pidió avanzar con los 10 hallazgos
+pendientes de la revisión senior de 793abf4/e0ec81e. Dos quedaban atados a
+decisiones de negocio explícitas de Luis antes de tocar código:
+
+- **`_MAX_DECKS_PER_USER=20`: SÍ es umbral de negocio** (no defensivo como
+  decía el comentario original) — va a tabla paramétrica con CRUD +
+  vista de admin, mismo criterio que `gacha_config` (regla global de
+  CLAUDE.md). Nueva tabla `deck_config` (fila única id=1), sembrada por la
+  migración misma (no depende de un seed manual para no quedar "sin
+  configurar" en ningún ambiente real) — `seed_deck_config.py` existe solo
+  para tests, que arman el schema con `create_all` sin migraciones.
+  `GET/PUT /api/admin/deck-config` protegido por `get_current_superadmin`,
+  pantalla Flutter `DeckConfigAdminPage` gateada en `ProfilePage` igual que
+  la de gacha.
+- **UX de "jugar sin guardar"**: ni ratificar el flujo 100% forzado ni
+  revertir a la ruta paralela de antes — Luis pidió una alternativa a
+  mitad de camino. Se presentaron 3 opciones (auto-nombrado, ruta paralela
+  sin persistir, slot temporal reciclable); eligió **auto-nombrado**:
+  `DeckBuilderPage._save()` genera `"Mazo dd/mm hh:mm"` si el campo de
+  nombre queda vacío, sin modal ni paso extra — sigue gastando 1 de los
+  N mazos del tope (no es un slot gratis), pero nunca bloquea con un
+  "poné un nombre" delante del botón Guardar. Efecto colateral bueno: al
+  sacar el requisito de nombre no vacío de `_canSave`, se pudo borrar
+  también el `onChanged: (_) => setState(() {})` que causaba el rebuild de
+  toda la página por tecla (hallazgo #10) — un solo cambio resolvió los dos.
+
+Resto de hallazgos, con su fix:
+
+- **Race condition (TOCTOU) real**: `create_deck` ahora lockea la fila del
+  `User` con `with_for_update()` antes de contar+insertar, serializando
+  creaciones concurrentes del mismo usuario. Test de regresión con 5
+  threads reales contra el tope (`max_decks_per_user=1` vía DB): antes del
+  fix hubiera dejado pasar más de un 201; con el fix, exactamente uno.
+- **N+1 en `list_decks`**: una sola query con `deck_id.in_(...)` agrupada
+  en memoria por `deck_id`, en vez de una query de cartas por mazo.
+- **Queries redundantes**: `_validate_deck_cards` ahora devuelve las filas
+  ya cargadas (`dict[player_card_id, (PlayerCard, CardArchetype)]`) y
+  `create_deck`/`update_deck` las reusan para armar la respuesta — ya no
+  se vuelve a consultar en `_deck_out` lo que se acababa de cargar para
+  validar.
+- **`DELETE` no-op en `create_deck`**: se separó `_insert_deck_cards`
+  (solo INSERT, usado por `create_deck`) de `_replace_deck_cards`
+  (DELETE+INSERT, usado por `update_deck`, que si necesita borrar lo
+  previo).
+- **`MyDecksPage` sin `mounted`**: chequeo agregado en `_createNew`,
+  `_edit` (tras el `await Navigator...push`) y en `_delete` (tras el
+  `await showDialog` y tras el `await deleteDeck`).
+- **`OwnedCardOut` duplicado**: `owned_card_out()` nuevo en
+  `card_ownership.py`, reusado por `cards.py` y `decks.py`.
+- **`FutureBuilder` boilerplate x4**: `AsyncFutureView<T>` nuevo en
+  `presentation/widgets/`, adoptado por `MyDecksPage`, `DeckBuilderPage`,
+  `MarketplacePage`, `GachaConfigAdminPage` y la `DeckConfigAdminPage`
+  nueva (5 pantallas, no 4 — la nueva pantalla de admin nació ya usándolo).
+
+**Verificado**: suite backend completa contra Postgres real vía contenedor
+Python 3.9 en la red `cardgame_dev_net` (los contenedores de dev no
+publican puerto a host, así que se corrió un contenedor efímero conectado
+a esa red en vez de tocar la configuración de los contenedores existentes)
+— 159 passed + 1 skip (152 previos + 7 nuevos: 1 de concurrencia + 6 del
+admin de `deck_config`). `flutter analyze`: 0 errores nuevos (30 infos
+preexistentes de `withOpacity`, sin relación). `flutter test`: 34 passed,
+sin regresiones. Verificación end-to-end en browser real (Playwright por
+coordenadas, mismo approach que rondas anteriores): usuario de prueba
+creado directo en Postgres (email verificado, superadmin, 12 cartas de 3
+facciones) contra un backend corrido en un contenedor con el puerto
+publicado — creó un mazo de 10 cartas sin escribir nombre → apareció en
+"Mis Mazos" como "Mazo 16/07 13:45"; en el admin de mazos cambió el tope
+de 20 a 15 y se confirmó persistido vía API. Después de verificar, se
+reseteó la base de dev a su estado limpio (schema + seeds base, sin el
+usuario de prueba) — nota operativa ya documentada en la ronda de gacha
+sigue aplicando: el fixture `_setup_db` hace `drop_all` después de cada
+test, así que correr algo manual contra el Postgres persistente después de
+una corrida de pytest requiere `DROP SCHEMA public CASCADE` +
+`alembic upgrade head` antes.

@@ -3,9 +3,9 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-import '../../core/errors/api_exception.dart';
 import '../../domain/entities/gacha_config.dart';
 import '../providers/pack_provider.dart';
+import '../widgets/async_future_view.dart';
 import 'pack_opening_page.dart';
 
 /// Nombres de sobre puramente decorativos — no es un valor de negocio (no
@@ -78,35 +78,12 @@ class _MarketplacePageState extends ConsumerState<MarketplacePage> {
                 ).animate().fadeIn().slideX(),
                 const SizedBox(height: 20),
                 Expanded(
-                  child: FutureBuilder<List<GachaPackLevelConfig>>(
+                  child: AsyncFutureView<List<GachaPackLevelConfig>>(
                     future: _levelsFuture,
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState != ConnectionState.done) {
-                        return const Center(
-                          child: CircularProgressIndicator(color: Colors.amber),
-                        );
-                      }
-                      if (snapshot.hasError) {
-                        final message = snapshot.error is ApiException
-                            ? (snapshot.error as ApiException).message
-                            : 'No se pudieron cargar los sobres.';
-                        return Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                message,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(color: Colors.redAccent),
-                              ),
-                              const SizedBox(height: 16),
-                              ElevatedButton(onPressed: _reload, child: const Text('Reintentar')),
-                            ],
-                          ),
-                        );
-                      }
-
-                      final levels = snapshot.data!;
+                    onRetry: _reload,
+                    loadingColor: Colors.amber,
+                    errorFallbackMessage: 'No se pudieron cargar los sobres.',
+                    builder: (context, levels) {
                       return GridView.builder(
                         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2,

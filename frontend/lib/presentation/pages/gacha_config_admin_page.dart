@@ -6,6 +6,7 @@ import '../../domain/entities/card.dart';
 import '../../domain/entities/gacha_config.dart';
 import '../../domain/repositories/gacha_config_repository.dart';
 import '../providers/gacha_config_provider.dart';
+import '../widgets/async_future_view.dart';
 
 /// Solo alcanzable si `user.isSuperadmin` — el backend igual devuelve 403
 /// para cualquier otro caso, esta pantalla es solo el punto de entrada.
@@ -40,36 +41,11 @@ class _GachaConfigAdminPageState extends ConsumerState<GachaConfigAdminPage> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('GACHA CONFIG')),
-      body: FutureBuilder<GachaConfigEntity>(
+      body: AsyncFutureView<GachaConfigEntity>(
         future: _configFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            final message = snapshot.error is ApiException
-                ? (snapshot.error as ApiException).message
-                : 'No se pudo cargar la configuración.';
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      message,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.redAccent),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(onPressed: _reload, child: const Text('Reintentar')),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          final config = snapshot.data!;
+        onRetry: _reload,
+        errorFallbackMessage: 'No se pudo cargar la configuración.',
+        builder: (context, config) {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [

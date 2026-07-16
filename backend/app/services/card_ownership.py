@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models.card_archetype import CardArchetype
 from app.models.player_card import PlayerCard
+from app.schemas.collection import OwnedCardOut
 
 # Query PlayerCard+CardArchetype compartida — antes duplicada en
 # app/api/cards.py y app/api/match_ws.py (y a punto de aparecer una tercera
@@ -37,3 +38,18 @@ def load_owned_cards(
     if limit is not None:
         query = query.limit(limit)
     return db.execute(query).all()
+
+
+def owned_card_out(player_card: PlayerCard, archetype: CardArchetype) -> OwnedCardOut:
+    """Serialización compartida de un (PlayerCard, CardArchetype) — antes
+    construida igual y por separado en app/api/cards.py y app/api/decks.py."""
+    return OwnedCardOut(
+        player_card_id=player_card.id,
+        archetype_id=archetype.id,
+        name=archetype.name,
+        faction=archetype.faction,
+        rank=archetype.rank,
+        rarity=player_card.rarity,
+        attack=player_card.attack,
+        defense=player_card.defense,
+    )

@@ -8,6 +8,7 @@ import '../providers/auth_provider.dart';
 import '../widgets/auth_primary_button.dart';
 import '../widgets/auth_scaffold.dart';
 import '../widgets/auth_text_field.dart';
+import 'deck_config_admin_page.dart';
 import 'gacha_config_admin_page.dart';
 import 'login_page.dart';
 
@@ -144,6 +145,16 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               },
               icon: const FaIcon(FontAwesomeIcons.gears, size: 16),
               label: const Text('ADMIN: CONFIG DE GACHA'),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const DeckConfigAdminPage()),
+                );
+              },
+              icon: const FaIcon(FontAwesomeIcons.layerGroup, size: 16),
+              label: const Text('ADMIN: CONFIG DE MAZOS'),
             ),
           ],
           const SizedBox(height: 16),
