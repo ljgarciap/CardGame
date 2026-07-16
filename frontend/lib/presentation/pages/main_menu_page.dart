@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'deck_builder_page.dart';
 import 'marketplace_page.dart';
 import 'profile_page.dart';
 
@@ -98,7 +99,11 @@ class MainMenuPage extends StatelessWidget {
                     _MenuButton(
                       label: 'MULTIPLAYER',
                       icon: FontAwesomeIcons.users,
-                      onPressed: () {},
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (context) => const DeckBuilderPage()),
+                        );
+                      },
                     ).animate().slideX(begin: 0.2).fadeIn(delay: 700.ms),
                     const SizedBox(height: 20),
                     _MenuButton(

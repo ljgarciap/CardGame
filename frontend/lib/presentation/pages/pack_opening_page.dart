@@ -9,6 +9,7 @@ import '../../core/errors/api_exception.dart';
 import '../../domain/entities/card.dart';
 import '../providers/auth_provider.dart';
 import '../providers/pack_provider.dart';
+import '../widgets/game_card_widget.dart';
 
 class PackOpeningPage extends ConsumerStatefulWidget {
   final int level;
@@ -143,9 +144,17 @@ class _PackOpeningPageState extends ConsumerState<PackOpeningPage> {
             itemCount: _revealedCards.length,
             padding: const EdgeInsets.symmetric(horizontal: 50),
             itemBuilder: (context, index) {
+              final card = _revealedCards[index];
               return Padding(
                 padding: const EdgeInsets.all(10.0),
-                child: _TCGCardWidget(card: _revealedCards[index])
+                child: GameCardWidget(
+                  name: card.name,
+                  faction: card.faction,
+                  rank: card.rank,
+                  rarity: card.rarity,
+                  attack: card.attack,
+                  defense: card.defense,
+                )
                   .animate(delay: (index * 300).ms)
                   .flipH()
                   .fadeIn()
@@ -162,100 +171,6 @@ class _PackOpeningPageState extends ConsumerState<PackOpeningPage> {
           }),
           child: const Text('OPEN ANOTHER', style: TextStyle(color: Colors.white54)),
         ),
-      ],
-    );
-  }
-}
-
-class _TCGCardWidget extends StatelessWidget {
-  final TCGCardEntity card;
-
-  const _TCGCardWidget({required this.card});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = _getRarityColor(card.rarity);
-
-    return Container(
-      width: 250,
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: color, width: 3),
-        boxShadow: [
-          BoxShadow(color: color.withOpacity(0.3), blurRadius: 20, spreadRadius: 5),
-        ],
-      ),
-      child: Column(
-        children: [
-          // Header
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.2),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(card.rank.name.toUpperCase(), style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.bold)),
-                FaIcon(FontAwesomeIcons.bolt, size: 12, color: color),
-              ],
-            ),
-          ),
-          const Expanded(
-            child: Center(
-              child: FaIcon(FontAwesomeIcons.userAstronaut, size: 80, color: Colors.white24),
-            ),
-          ),
-          // Info
-          Padding(
-            padding: const EdgeInsets.all(15.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(card.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                const SizedBox(height: 5),
-                Text(card.faction.name.toUpperCase(), style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12)),
-                const Divider(color: Colors.white12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _Stat(label: 'ATK', value: card.attack, color: Colors.red),
-                    _Stat(label: 'DEF', value: card.defense, color: Colors.blue),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Color _getRarityColor(CardRarity rarity) {
-    switch (rarity) {
-      case CardRarity.common: return Colors.grey;
-      case CardRarity.rare: return Colors.blue;
-      case CardRarity.epic: return Colors.purple;
-      case CardRarity.legendary: return Colors.amber;
-    }
-  }
-}
-
-class _Stat extends StatelessWidget {
-  final String label;
-  final int value;
-  final Color color;
-
-  const _Stat({required this.label, required this.value, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Text('$label ', style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
-        Text('$value', style: const TextStyle(fontWeight: FontWeight.bold)),
       ],
     );
   }
