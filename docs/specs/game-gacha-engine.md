@@ -1,6 +1,8 @@
 # Spec de juego: Motor de Gacha (Game Expert)
 
-Estado: Aprobado por Luis (2026-07-12) — listo para diseño técnico del Architect
+Estado: **Done** — implementado, revisado (`docs/reviews/gacha-engine.md`,
+🟢) y validado por QA (`docs/qa/gacha-engine-2026-07-15.md`).
+(Aprobado por Luis 2026-07-12 — listo para diseño técnico del Architect.)
 
 ## Problema y objetivo
 Hoy `PackOpeningPage` genera cartas 100% en el cliente, con probabilidades

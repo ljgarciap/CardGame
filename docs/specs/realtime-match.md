@@ -1,7 +1,8 @@
 # Spec de juego: Partida en Tiempo Real (Game Expert)
 
-Estado: Aprobado por Luis (2026-07-15) — listo para diseño técnico del
-Architect.
+Estado: **Done** — implementado y revisado (2 rondas de Senior Reviewer:
+4 bugs de concurrencia + hallazgos medios/bajos, ver `docs/memory.md`).
+(Aprobado por Luis 2026-07-15 — listo para diseño técnico del Architect.)
 
 ## Decisiones de alcance (aprobadas)
 - **Sin sistema de recursos**: no hay maná/energía. Se juega 1 carta por

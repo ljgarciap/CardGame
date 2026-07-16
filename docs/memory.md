@@ -373,3 +373,21 @@ sigue aplicando: el fixture `_setup_db` hace `drop_all` después de cada
 test, así que correr algo manual contra el Postgres persistente después de
 una corrida de pytest requiere `DROP SCHEMA public CASCADE` +
 `alembic upgrade head` antes.
+
+**Revisión senior post-fix (commit `1bdb5af`)**: 2 hallazgos nuevos, no
+cubiertos por el trabajo original — reporte completo en
+`docs/reviews/mazos-guardados.md`. `get_or_create_deck_config` comiteaba
+internamente, lo que podía liberarle a `create_deck` el lock de `User`
+antes de tiempo y reabrir el TOCTOU (ventana angosta, no reproducida
+empíricamente en 6 corridas con hasta 25 threads, pero defecto de diseño
+real). `DeckConfigAdminPage` disparaba un reload del padre al guardar, que
+desmontaba el widget antes de mostrar "Tope de mazos actualizado." — el
+mensaje de éxito era código muerto. Ambos corregidos (commit `80e5e44`) y
+verificados en vivo, no solo por inspección de código. Spec retroactiva
+agregada en `docs/specs/mazos-guardados.md` (commit `c4dce89`).
+
+**Cierre — 2026-07-16: Luis aprobó la feature completa.** Mazos guardados
+queda cerrado: implementación (793abf4/e0ec81e) → 10 hallazgos originales
+resueltos (1bdb5af) → revisión senior con 2 hallazgos más, corregidos
+(80e5e44) → spec retroactiva (c4dce89) → aprobación final de Luis. QA
+formal no aplica (rol no activado todavía en CardGame).
