@@ -27,7 +27,7 @@ frontend/ios/Flutter/flutter_export_environment.sh
 frontend/android/key.properties
 
 # --- Python (Backend) ---
-backend/__pycache__/
+backend/**/__pycache__/
 backend/*.py[cod]
 backend/*$py.class
 backend/.venv/

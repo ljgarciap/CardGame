@@ -60,3 +60,49 @@ Checklist for any migration that adds an `Enum`-typed column:
    `server_default=...` in the migration (autogenerate doesn't add one) or
    it breaks against any table that already has rows — even if your local
    dev DB happens to be empty when you write the migration.
+
+### Redis async client: never a plain module-level singleton
+
+`app/db/redis.py`'s `get_redis_client()` is a lazy singleton, but plain
+laziness isn't enough — it also has to be **loop-aware** (reconstruct the
+client if the running event loop changed since it was built). Two distinct
+bugs hit this in the real-time-match feature (`docs/designs/realtime-match.md`),
+both with the identical symptom `RuntimeError: ... got Future attached to a
+different loop`:
+
+1. Building the client **at module import time** binds its internal
+   connection-pool lock to whatever loop exists at import time (Python 3.9),
+   which isn't the real loop Uvicorn creates afterward. Fixed by lazy
+   construction on first real use.
+2. Even lazy, a **plain one-time singleton still breaks** the moment the
+   same process later calls it from a *different* event loop than the one
+   that built it — which happens more than it sounds: any test harness that
+   spins up a fresh loop per test (Starlette's `TestClient` does, for every
+   `websocket_connect()`), or any long-lived process that recreates its
+   loop (e.g. a management command calling `asyncio.run()` more than once).
+   Fixed by tracking the loop the client was built on and rebuilding if
+   `asyncio.get_running_loop()` returns a different one — see
+   `get_redis_client()`'s docstring for the full reasoning.
+
+Any new module that wants a shared Redis client should import
+`get_redis_client()` and call it **fresh, inside each function**, never
+bind it to a module-level name — that's what makes the loop-awareness above
+actually take effect for every caller.
+
+### Testing WebSocket disconnect handling against `TestClient`
+
+Exiting a `with client.websocket_connect(...) as ws:` block does **two**
+things, not one: it sends the graceful disconnect frame, then immediately
+force-cancels the server-side connection task via its `CancelScope` —
+with no wait in between for the app's own `finally` cleanup to finish. If
+that cleanup does real I/O (as `match_ws.py`'s disconnect handling does:
+acquiring the match lock, loading/saving match state, publishing the
+result), the forced cancellation can interrupt it mid-flight and corrupt
+the shared Redis connection for later operations on the same client.
+
+To test a graceful disconnect path, don't rely on the `with` block's exit.
+Call `.close()` directly (it only sends the disconnect frame, nothing
+else), wait for whatever confirms the server finished processing it, and
+only then call `.__exit__(None, None, None)` to fully tear down the test
+session — see `test_disconnect_ends_match_and_declares_opponent_winner` in
+`backend/tests/test_match_ws.py`.

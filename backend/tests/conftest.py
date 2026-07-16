@@ -1,10 +1,12 @@
 import pytest
+import pytest_asyncio
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
 from app.db.base import Base
+from app.db.redis import get_redis_client
 from app.db.session import get_db
 from app.main import app
 from app.models import user as _user  # noqa: F401 registers User on Base.metadata
@@ -21,6 +23,20 @@ def _setup_db():
     Base.metadata.create_all(bind=engine)
     yield
     Base.metadata.drop_all(bind=engine)
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _setup_redis():
+    """Sin esto, estado de una corrida (cola de matchmaking, partidas,
+    canales) sobrevive entre tests/corridas contra el Redis persistente de
+    desarrollo — un jugador "fantasma" de una corrida anterior puede quedar
+    en `match_queue` y emparejarse con un jugador real de una corrida nueva,
+    con un user_id que ya no corresponde a nadie conectado (bug real que
+    causó un hang silencioso en test_match_ws.py)."""
+    client = get_redis_client()
+    await client.flushdb()
+    yield
+    await client.flushdb()
 
 
 @pytest.fixture

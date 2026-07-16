@@ -1,0 +1,265 @@
+"""Endpoint WebSocket de partidas en tiempo real — integra matchmaking,
+match_engine, match_store, match_pubsub y user_notify. Ver
+docs/designs/realtime-match.md para el protocolo completo y el porqué de
+cada pieza.
+
+`_local_connections`/`_local_match_ids` son estado de ESTE proceso/worker
+únicamente (qué conexiones WebSocket tiene ESTE worker ahora mismo) — el
+estado que sí es compartido entre workers vive en Redis
+(match_store/matchmaking), nunca acá.
+"""
+import asyncio
+import uuid
+from typing import Optional
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.core.security import decode_access_token
+from app.db.session import get_db
+from app.models.card_archetype import CardArchetype
+from app.models.player_card import PlayerCard
+from app.models.user import User
+from app.services import match_pubsub, match_store, matchmaking, user_notify
+from app.services.match_engine import (
+    DECK_SIZE,
+    CardInPlay,
+    MatchRuleViolation,
+    attack,
+    build_state_view,
+    end_turn,
+    forfeit,
+    handle_disconnect,
+    play_card,
+    start_match,
+)
+
+router = APIRouter()
+
+_local_connections: dict[UUID, WebSocket] = {}
+_local_match_ids: dict[UUID, UUID] = {}
+
+
+async def _authenticate(websocket: WebSocket, db: Session) -> Optional[User]:
+    token = websocket.query_params.get("token")
+    if not token:
+        return None
+    user_id_str = decode_access_token(token)
+    if user_id_str is None:
+        return None
+    try:
+        user_uuid = uuid.UUID(user_id_str)
+    except ValueError:
+        return None
+    return db.execute(select(User).where(User.id == user_uuid)).scalar_one_or_none()
+
+
+def _resolve_deck(db: Session, user: User, raw_deck: list) -> list[CardInPlay]:
+    try:
+        player_card_ids = [uuid.UUID(str(cid)) for cid in raw_deck]
+    except (ValueError, TypeError, AttributeError):
+        raise MatchRuleViolation("deck inválido")
+
+    if len(player_card_ids) != DECK_SIZE or len(set(player_card_ids)) != DECK_SIZE:
+        raise MatchRuleViolation(f"el mazo debe tener exactamente {DECK_SIZE} cartas distintas")
+
+    rows = db.execute(
+        select(PlayerCard, CardArchetype)
+        .join(CardArchetype, PlayerCard.archetype_id == CardArchetype.id)
+        .where(PlayerCard.id.in_(player_card_ids), PlayerCard.user_id == user.id)
+    ).all()
+    by_id = {player_card.id: (player_card, archetype) for player_card, archetype in rows}
+    if len(by_id) != DECK_SIZE:
+        raise MatchRuleViolation("alguna carta del mazo no existe o no te pertenece")
+
+    cards = []
+    for player_card_id in player_card_ids:
+        player_card, archetype = by_id[player_card_id]
+        cards.append(
+            CardInPlay(
+                player_card_id=player_card.id,
+                name=archetype.name,
+                faction=archetype.faction,
+                rank=archetype.rank,
+                rarity=player_card.rarity,
+                attack=player_card.attack,
+                max_defense=player_card.defense,
+                current_defense=player_card.defense,
+            )
+        )
+    return cards
+
+
+async def _try_start_match() -> None:
+    """Se llama después de cada `queue` exitoso — si hay 2+ jugadores en
+    cola, arma la partida y avisa a ambos por user_notify (sin importar en
+    qué worker esté conectado cada uno)."""
+    pair = await matchmaking.try_pair()
+    if pair is None:
+        return
+
+    entry_a, entry_b = pair
+    match = start_match(
+        match_id=uuid.uuid4(),
+        player_a=(entry_a.user_id, entry_a.username, entry_a.deck),
+        player_b=(entry_b.user_id, entry_b.username, entry_b.deck),
+    )
+    await match_store.save_match(match)
+
+    for entry, opponent in ((entry_a, entry_b), (entry_b, entry_a)):
+        await user_notify.notify_user(
+            entry.user_id,
+            {
+                "type": "match_found",
+                "match_id": str(match.id),
+                "opponent_username": opponent.username,
+            },
+        )
+
+
+async def _handle_queue(db: Session, user: User, raw_deck: list) -> None:
+    cards = _resolve_deck(db, user, raw_deck)
+    await matchmaking.enqueue(
+        matchmaking.QueueEntry(user_id=user.id, username=user.username, deck=cards)
+    )
+    await _try_start_match()
+
+
+async def _handle_match_action(user_id: UUID, action: str, raw: dict) -> None:
+    match_id = _local_match_ids.get(user_id)
+    if match_id is None:
+        raise MatchRuleViolation("no estás en ninguna partida")
+
+    async with match_store.match_lock(match_id):
+        match = await match_store.load_match(match_id)
+        if match is None:
+            raise MatchRuleViolation("la partida ya no existe")
+
+        if action == "play_card":
+            play_card(match, user_id, uuid.UUID(str(raw["player_card_id"])))
+        elif action == "attack":
+            target = raw["target"]
+            target_value = "face" if target == "face" else uuid.UUID(str(target["card_id"]))
+            attack(match, user_id, uuid.UUID(str(raw["attacker_id"])), target_value)
+        elif action == "end_turn":
+            end_turn(match, user_id)
+        elif action == "forfeit":
+            forfeit(match, user_id)
+
+        await match_store.save_match(match)
+
+    await match_pubsub.publish_match_update(match)
+
+
+async def _forward_match_events(user_id: UUID, match_pubsub_conn, websocket: WebSocket) -> None:
+    async for match in match_pubsub.consume(match_pubsub_conn):
+        if match.is_over:
+            await websocket.send_json(
+                {
+                    "type": "match_over",
+                    "winner_user_id": str(match.winner_user_id) if match.winner_user_id else None,
+                    "reason": match.reason,
+                }
+            )
+            _local_match_ids.pop(user_id, None)
+            return
+        await websocket.send_json({"type": "state_update", "state": build_state_view(match, user_id)})
+
+
+async def _forward_events(user_id: UUID, websocket: WebSocket, user_pubsub) -> None:
+    """Tarea de fondo por conexión: primero escucha el canal de usuario
+    (emparejamiento) sobre una suscripción ya confirmada (ver
+    match_websocket), y al recibir un match_found pasa a escuchar el canal
+    de esa partida — reenvía todo al WebSocket local."""
+    async for notification in user_notify.consume(user_pubsub):
+        if notification.get("type") != "match_found":
+            continue
+
+        match_id = UUID(notification["match_id"])
+        _local_match_ids[user_id] = match_id
+
+        # Suscribirse al canal de la partida ANTES de leer el snapshot
+        # inicial (y antes de mandar match_found, que es lo que habilita al
+        # cliente a empezar a jugar) — evita perder un publish de un rival
+        # que actúe muy rápido, incluida la partida ya terminada por forfeit
+        # inmediato.
+        match_pubsub_conn = await match_pubsub.subscribe(match_id)
+
+        await websocket.send_json(
+            {
+                "type": "match_found",
+                "match_id": str(match_id),
+                "opponent_username": notification["opponent_username"],
+            }
+        )
+
+        match = await match_store.load_match(match_id)
+        if match is not None:
+            await websocket.send_json(
+                {"type": "state_update", "state": build_state_view(match, user_id)}
+            )
+
+        await _forward_match_events(user_id, match_pubsub_conn, websocket)
+
+
+async def _resolve_disconnect(user_id: UUID) -> None:
+    await matchmaking.leave_queue(user_id)
+    match_id = _local_match_ids.pop(user_id, None)
+    if match_id is None:
+        return
+    async with match_store.match_lock(match_id):
+        match = await match_store.load_match(match_id)
+        if match is None or match.is_over:
+            return
+        handle_disconnect(match, user_id)
+        await match_store.save_match(match)
+    await match_pubsub.publish_match_update(match)
+
+
+@router.websocket("/ws/match")
+async def match_websocket(websocket: WebSocket, db: Session = Depends(get_db)):
+    user = await _authenticate(websocket, db)
+    if user is None:
+        # Rechazar el handshake sin aceptar: el cliente ve el connect fallar
+        # en vez de una conexión abierta que se cierra sola al instante.
+        await websocket.close(code=4401)
+        return
+
+    await websocket.accept()
+    _local_connections[user.id] = websocket
+
+    # Suscripción al canal de usuario confirmada ANTES de aceptar cualquier
+    # mensaje del cliente — si no, un `queue` que el propio jugador manda
+    # apenas conecta puede completar el emparejamiento y publicar su propio
+    # match_found antes de que esta suscripción termine de ir y volver de
+    # Redis, perdiendo la notificación para siempre (ver user_notify.py).
+    user_pubsub = await user_notify.subscribe_user(user.id)
+    forward_task = asyncio.create_task(_forward_events(user.id, websocket, user_pubsub))
+
+    try:
+        while True:
+            raw = await websocket.receive_json()
+            action = raw.get("action")
+            try:
+                if action == "queue":
+                    await _handle_queue(db, user, raw.get("deck", []))
+                elif action == "leave_queue":
+                    await matchmaking.leave_queue(user.id)
+                elif action in ("play_card", "attack", "end_turn", "forfeit"):
+                    await _handle_match_action(user.id, action, raw)
+                else:
+                    await websocket.send_json(
+                        {"type": "error", "detail": f"acción desconocida: {action}"}
+                    )
+            except MatchRuleViolation as e:
+                await websocket.send_json({"type": "error", "detail": str(e)})
+            except (KeyError, ValueError, TypeError):
+                await websocket.send_json({"type": "error", "detail": "mensaje inválido"})
+    except WebSocketDisconnect:
+        pass
+    finally:
+        _local_connections.pop(user.id, None)
+        forward_task.cancel()
+        await _resolve_disconnect(user.id)

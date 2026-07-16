@@ -6,6 +6,15 @@ borrador original: el estado de partida vive en Redis (no en memoria de un
 solo proceso), para soportar múltiples workers/procesos de backend sin
 perder correctitud — pedido explícito de Luis.
 
+Backend: **implementado y verificado** (2026-07-15) — las 7 tareas de la
+tabla de estimación están completas, con tests contra Postgres/Redis reales
+(no mocks) y una verificación end-to-end adicional con 2 procesos backend
+independientes (contenedores separados) compartiendo el mismo Redis, jugando
+una partida completa hasta la victoria. Dos bugs de concurrencia real
+encontrados y corregidos en el camino — ver "Redis async client" y "Testing
+WebSocket disconnect handling" en `docs/architecture.md`. Frontend (deck
+builder + pantallas de partida) sigue pendiente de una ronda de PM separada.
+
 ## Decisiones de arquitectura
 
 ### Estado de partida: Redis, no Postgres, no memoria de un solo proceso
