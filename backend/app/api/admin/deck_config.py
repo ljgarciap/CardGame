@@ -15,7 +15,13 @@ router = APIRouter(
 
 @router.get("", response_model=DeckConfigOut)
 def get_deck_config(db: Session = Depends(get_db)):
-    return get_or_create_deck_config(db)
+    config = get_or_create_deck_config(db)
+    # get_or_create_deck_config ya no comitea (ver su docstring) para no
+    # liberarle el lock a callers como create_deck -- acá, sin ningún lock
+    # en juego, hace falta este commit explícito para que la fila default
+    # persista más allá de este request en vez de recrearse en cada GET.
+    db.commit()
+    return config
 
 
 @router.put("", response_model=DeckConfigOut)

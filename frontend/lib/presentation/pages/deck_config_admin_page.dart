@@ -41,10 +41,7 @@ class _DeckConfigAdminPageState extends ConsumerState<DeckConfigAdminPage> {
         future: _configFuture,
         onRetry: _reload,
         errorFallbackMessage: 'No se pudo cargar la configuración.',
-        builder: (context, config) => _MaxDecksSection(
-          initialValue: config.maxDecksPerUser,
-          onReloaded: _reload,
-        ),
+        builder: (context, config) => _MaxDecksSection(initialValue: config.maxDecksPerUser),
       ),
     );
   }
@@ -52,9 +49,8 @@ class _DeckConfigAdminPageState extends ConsumerState<DeckConfigAdminPage> {
 
 class _MaxDecksSection extends StatefulWidget {
   final int initialValue;
-  final Future<void> Function() onReloaded;
 
-  const _MaxDecksSection({required this.initialValue, required this.onReloaded});
+  const _MaxDecksSection({required this.initialValue});
 
   @override
   State<_MaxDecksSection> createState() => _MaxDecksSectionState();
@@ -91,7 +87,10 @@ class _MaxDecksSectionState extends State<_MaxDecksSection> {
         throw const FormatException('debe ser positivo');
       }
       await ref.read(deckConfigRepositoryProvider).updateMaxDecksPerUser(value);
-      await widget.onReloaded();
+      // No hace falta recargar el Future del padre para saber el valor que
+      // acabamos de guardar -- hacerlo desmontaría este widget (mismo
+      // patrón que ya usa GachaConfigAdminPage: cada sección maneja su
+      // propio mensaje de éxito/error local).
       if (!mounted) return;
       setState(() => _successMessage = 'Tope de mazos actualizado.');
     } on ApiException catch (e) {
