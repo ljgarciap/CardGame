@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.admin.gacha_config import router as gacha_config_admin_router
 from app.api.auth import router as auth_router
+from app.api.cards import router as cards_router
 from app.api.match_ws import router as match_ws_router
 from app.api.packs import router as packs_router
 from app.api.users import router as users_router
@@ -12,6 +13,7 @@ app = FastAPI(title="Card Game API")
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(packs_router)
+app.include_router(cards_router)
 app.include_router(gacha_config_admin_router)
 app.include_router(match_ws_router)
 
