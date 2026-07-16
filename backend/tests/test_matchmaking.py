@@ -70,6 +70,37 @@ async def test_leave_queue_returns_false_when_not_queued():
 
 
 @pytest.mark.asyncio
+async def test_leave_queue_is_atomic_against_concurrent_try_pair():
+    """Antes de que leave_queue fuera un script Lua atómico (LRANGE+LREM en
+    dos viajes separados), había una ventana real entre esos dos pasos
+    donde un try_pair() concurrente de otro worker podía emparejar al
+    jugador que se estaba yendo, dejando al rival esperando una jugada que
+    nunca iba a llegar. Se repite muchas veces para forzar la ventana de
+    carrera contra Redis real."""
+    for _ in range(50):
+        victim = _make_entry("victim")
+        partner = _make_entry("partner")
+        await enqueue(victim)
+        await enqueue(partner)
+
+        left, paired = await asyncio.gather(leave_queue(victim.user_id), try_pair())
+
+        if paired is not None:
+            # try_pair ganó la carrera: emparejó a victim y partner, así
+            # que leave_queue no debe haber sacado también a victim (ya no
+            # estaba en la cola para que lo sacara).
+            paired_ids = {paired[0].user_id, paired[1].user_id}
+            assert paired_ids == {victim.user_id, partner.user_id}
+            assert left is False
+        else:
+            # leave_queue ganó la carrera: victim debe haber sido sacado
+            # efectivamente, y partner debe seguir solo en la cola.
+            assert left is True
+            assert await get_redis_client().llen(_QUEUE_KEY) == 1
+            await get_redis_client().delete(_QUEUE_KEY)
+
+
+@pytest.mark.asyncio
 async def test_concurrent_try_pair_never_double_pairs_or_loses_players():
     """El caso real que importa: muchos workers llamando try_pair() casi al
     mismo tiempo sobre la misma cola no deberían nunca emparejar al mismo

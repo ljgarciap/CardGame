@@ -28,6 +28,24 @@ end
 return false
 """
 
+# Buscar-y-sacar en un solo EVAL, no LRANGE+LREM en dos viajes separados:
+# Redis ejecuta un script a la vez (modelo single-threaded), así que esto no
+# puede intercalarse con _TRY_PAIR_SCRIPT — sin esto, un `try_pair` de otro
+# worker puede ganarle la carrera a un `leave_queue` disparado por una
+# desconexión, emparejando a un jugador que ya no tiene conexión y dejando
+# al rival esperando una jugada que nunca llega.
+_LEAVE_QUEUE_SCRIPT = """
+local entries = redis.call('LRANGE', KEYS[1], 0, -1)
+for i, raw in ipairs(entries) do
+    local entry = cjson.decode(raw)
+    if entry.user_id == ARGV[1] then
+        redis.call('LREM', KEYS[1], 1, raw)
+        return 1
+    end
+end
+return 0
+"""
+
 
 class QueueEntry(BaseModel):
     user_id: UUID
@@ -42,15 +60,10 @@ async def enqueue(entry: QueueEntry) -> None:
 
 async def leave_queue(user_id: UUID) -> bool:
     """Busca y saca a este usuario de la cola, si todavía está esperando.
-    Devuelve True si lo encontró y sacó."""
+    Devuelve True si lo encontró y sacó. Atómico (ver _LEAVE_QUEUE_SCRIPT)."""
     client = get_redis_client()
-    raw_entries = await client.lrange(_QUEUE_KEY, 0, -1)
-    for raw in raw_entries:
-        entry = QueueEntry.model_validate_json(raw)
-        if entry.user_id == user_id:
-            removed = await client.lrem(_QUEUE_KEY, 1, raw)
-            return removed > 0
-    return False
+    removed = await client.eval(_LEAVE_QUEUE_SCRIPT, 1, _QUEUE_KEY, str(user_id))
+    return bool(removed)
 
 
 async def try_pair() -> Optional[tuple[QueueEntry, QueueEntry]]:

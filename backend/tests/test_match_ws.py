@@ -67,7 +67,9 @@ def test_queue_and_match_found_broadcasts_initial_state(client, db_session):
     with client.websocket_connect(f"/ws/match?token={_token(user_a)}") as ws_a, \
             client.websocket_connect(f"/ws/match?token={_token(user_b)}") as ws_b:
         ws_a.send_json({"action": "queue", "deck": deck_a})
+        assert ws_a.receive_json()["type"] == "queued"
         ws_b.send_json({"action": "queue", "deck": deck_b})
+        assert ws_b.receive_json()["type"] == "queued"
 
         found_a = ws_a.receive_json()
         state_a = ws_a.receive_json()
@@ -94,7 +96,9 @@ def test_end_turn_broadcasts_updated_state_to_both_players(client, db_session):
     with client.websocket_connect(f"/ws/match?token={_token(user_a)}") as ws_a, \
             client.websocket_connect(f"/ws/match?token={_token(user_b)}") as ws_b:
         ws_a.send_json({"action": "queue", "deck": deck_a})
+        ws_a.receive_json()  # queued
         ws_b.send_json({"action": "queue", "deck": deck_b})
+        ws_b.receive_json()  # queued
 
         ws_a.receive_json()  # match_found
         state_a = ws_a.receive_json()  # state_update
@@ -123,12 +127,14 @@ def test_action_out_of_turn_returns_error_only_to_sender(client, db_session):
     with client.websocket_connect(f"/ws/match?token={_token(user_a)}") as ws_a, \
             client.websocket_connect(f"/ws/match?token={_token(user_b)}") as ws_b:
         ws_a.send_json({"action": "queue", "deck": deck_a})
+        ws_a.receive_json()  # queued
         ws_b.send_json({"action": "queue", "deck": deck_b})
+        ws_b.receive_json()  # queued
 
-        ws_a.receive_json()
-        state_a = ws_a.receive_json()
-        ws_b.receive_json()
-        state_b = ws_b.receive_json()
+        ws_a.receive_json()  # match_found
+        state_a = ws_a.receive_json()  # state_update
+        ws_b.receive_json()  # match_found
+        state_b = ws_b.receive_json()  # state_update
 
         waiting_ws = ws_a if not state_a["state"]["your_turn"] else ws_b
 
@@ -139,6 +145,29 @@ def test_action_out_of_turn_returns_error_only_to_sender(client, db_session):
         assert "turno" in error["detail"]
 
 
+def test_queue_while_already_in_a_match_is_rejected(client, db_session):
+    user_a, deck_a = _make_player(db_session, username="ivan_ws")
+    user_b, deck_b = _make_player(db_session, username="judy_ws")
+
+    with client.websocket_connect(f"/ws/match?token={_token(user_a)}") as ws_a, \
+            client.websocket_connect(f"/ws/match?token={_token(user_b)}") as ws_b:
+        ws_a.send_json({"action": "queue", "deck": deck_a})
+        ws_a.receive_json()  # queued
+        ws_b.send_json({"action": "queue", "deck": deck_b})
+        ws_b.receive_json()  # queued
+
+        ws_a.receive_json()  # match_found
+        ws_a.receive_json()  # state_update
+        ws_b.receive_json()  # match_found
+        ws_b.receive_json()  # state_update
+
+        ws_a.send_json({"action": "queue", "deck": deck_a})
+        error = ws_a.receive_json()
+
+        assert error["type"] == "error"
+        assert "partida" in error["detail"]
+
+
 def test_disconnect_ends_match_and_declares_opponent_winner(client, db_session):
     user_a, deck_a = _make_player(db_session, username="grace_ws")
     user_b, deck_b = _make_player(db_session, username="heidi_ws")
@@ -147,12 +176,14 @@ def test_disconnect_ends_match_and_declares_opponent_winner(client, db_session):
         ws_b = client.websocket_connect(f"/ws/match?token={_token(user_b)}").__enter__()
         try:
             ws_a.send_json({"action": "queue", "deck": deck_a})
+            ws_a.receive_json()  # queued
             ws_b.send_json({"action": "queue", "deck": deck_b})
+            ws_b.receive_json()  # queued
 
-            ws_a.receive_json()
-            ws_a.receive_json()
-            ws_b.receive_json()
-            ws_b.receive_json()
+            ws_a.receive_json()  # match_found
+            ws_a.receive_json()  # state_update
+            ws_b.receive_json()  # match_found
+            ws_b.receive_json()  # state_update
 
             # Cierre "prolijo": solo manda el frame de disconnect y deja que
             # el servidor procese su `finally` (incluida la baja de la

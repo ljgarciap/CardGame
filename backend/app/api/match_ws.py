@@ -9,6 +9,7 @@ estado que sí es compartido entre workers vive en Redis
 (match_store/matchmaking), nunca acá.
 """
 import asyncio
+import contextlib
 import uuid
 from typing import Optional
 from uuid import UUID
@@ -119,11 +120,15 @@ async def _try_start_match() -> None:
         )
 
 
-async def _handle_queue(db: Session, user: User, raw_deck: list) -> None:
+async def _handle_queue(db: Session, user: User, raw_deck: list, websocket: WebSocket) -> None:
+    if user.id in _local_match_ids:
+        raise MatchRuleViolation("ya estás en una partida")
+
     cards = _resolve_deck(db, user, raw_deck)
     await matchmaking.enqueue(
         matchmaking.QueueEntry(user_id=user.id, username=user.username, deck=cards)
     )
+    await websocket.send_json({"type": "queued"})
     await _try_start_match()
 
 
@@ -240,11 +245,20 @@ async def match_websocket(websocket: WebSocket, db: Session = Depends(get_db)):
 
     try:
         while True:
-            raw = await websocket.receive_json()
-            action = raw.get("action")
+            try:
+                raw = await websocket.receive_json()
+                action = raw.get("action")
+            except (KeyError, ValueError, TypeError, AttributeError):
+                # JSON inválido (ValueError) o JSON válido que no es un
+                # objeto, ej. un número/string/lista/null (AttributeError en
+                # .get) — se responde y se sigue, en vez de tirar la
+                # conexión entera por un mensaje mal formado del cliente.
+                await websocket.send_json({"type": "error", "detail": "mensaje inválido"})
+                continue
+
             try:
                 if action == "queue":
-                    await _handle_queue(db, user, raw.get("deck", []))
+                    await _handle_queue(db, user, raw.get("deck", []), websocket)
                 elif action == "leave_queue":
                     await matchmaking.leave_queue(user.id)
                 elif action in ("play_card", "attack", "end_turn", "forfeit"):
@@ -262,4 +276,13 @@ async def match_websocket(websocket: WebSocket, db: Session = Depends(get_db)):
     finally:
         _local_connections.pop(user.id, None)
         forward_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            # Esperar a que la propia limpieza de forward_task (incluido su
+            # pubsub.aclose()) termine ANTES de que _resolve_disconnect haga
+            # su propio I/O real contra Redis sobre el mismo cliente
+            # compartido — sin este await, ambas corren concurrentemente y
+            # pueden pisarse la conexión (la misma clase de bug que ya se
+            # encontró y corrigió en el test de desconexión, pero acá viva
+            # en el propio endpoint).
+            await forward_task
         await _resolve_disconnect(user.id)
