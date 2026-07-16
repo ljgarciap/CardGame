@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'deck_builder_page.dart';
 import 'marketplace_page.dart';
+import 'my_decks_page.dart';
 import 'profile_page.dart';
 
 class MainMenuPage extends StatelessWidget {
@@ -101,7 +101,7 @@ class MainMenuPage extends StatelessWidget {
                       icon: FontAwesomeIcons.users,
                       onPressed: () {
                         Navigator.of(context).push(
-                          MaterialPageRoute(builder: (context) => const DeckBuilderPage()),
+                          MaterialPageRoute(builder: (context) => const MyDecksPage()),
                         );
                       },
                     ).animate().slideX(begin: 0.2).fadeIn(delay: 700.ms),

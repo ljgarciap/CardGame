@@ -225,3 +225,43 @@ corregir los 10 antes de pushear.
   segunda vuelta de la verificación end-to-end con Playwright — esta vez
   agregando específicamente un viewport de celular real para confirmar el
   fix del desborde.
+
+## 2026-07-16 (continuación 4) — Mazos guardados
+
+"Mazos guardados" estaba explícitamente fuera de alcance en el spec
+original del real-time match ("no hay tabla `decks`") — Luis pidió
+agregarlo como ronda de PM separada, con alcance "múltiples mazos con
+nombre" (no solo recordar el último usado). 7 tareas (#38-44).
+
+- **Tablas nuevas**: `decks` (id, user_id, name, timestamps) + `deck_cards`
+  (deck_id, player_card_id, position, FK con `ondelete=CASCADE`) —
+  normalizado, no JSON. El protocolo WebSocket de partida no cambió: `queue`
+  sigue recibiendo la misma lista de `player_card_id`, ahora tomada de un
+  mazo guardado en vez de una selección ad-hoc.
+- **Refactor proactivo**: la consulta PlayerCard+CardArchetype+ownership ya
+  estaba duplicada 2 veces (`cards.py`, `match_ws.py`) desde la revisión
+  anterior — esta feature hubiera agregado una tercera copia en los
+  endpoints de mazos, así que se extrajo a `app/services/card_ownership.py`
+  antes de escribir el CRUD nuevo, y los tres call sites la comparten ahora.
+- **CRUD `/api/decks`**: exactamente 10 cartas propias distintas (mismo
+  criterio de validación que ya usaba `match_ws.py` al encolar), ownership
+  check en update/delete (404 si el mazo no es del usuario, no 403 — no se
+  revela que el mazo existe), tope defensivo de 20 mazos por usuario (no es
+  un valor de negocio ajustable, mismo criterio que `DECK_SIZE`).
+- **Frontend**: `MyDecksPage` nueva es ahora el hub del flujo multijugador
+  (el botón MULTIPLAYER del menú entra acá, no directo al builder) —
+  Jugar/Editar/Eliminar por mazo, botón Nuevo mazo. `DeckBuilderPage` deja
+  de armar-y-encolar directo: ahora pide nombre y Guardar persiste el mazo
+  (crea o actualiza según si viene con `deckId`), sin una ruta paralela de
+  "jugar sin guardar" — un solo flujo coherente en vez de dos.
+- **Verificado end-to-end en browser real** (mismo approach Playwright por
+  coordenadas que las rondas anteriores, dado que Flutter Web no expone
+  `<input>`/texto real en el DOM): crear mazo con nombre + 10 cartas → 201,
+  aparece en la lista → editar (cambiar nombre) → 200, se actualiza →
+  eliminar → 204, la lista vuelve a estar vacía. Confirmado con logs reales
+  de `REQ`/`RES` de red, no solo capturas de pantalla.
+- Suite backend completa: 152 passed + 1 skip (12 tests nuevos de
+  `test_decks.py`). `flutter analyze`: 0 errores nuevos. `flutter test`: 34
+  passed (sin tests nuevos de widget para `MyDecksPage`/`DeckBuilderPage`
+  editado — cubierto por la verificación end-to-end en browser real en su
+  lugar, dado el tiempo ya invertido en esta ronda).

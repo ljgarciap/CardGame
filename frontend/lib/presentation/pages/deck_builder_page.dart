@@ -4,16 +4,31 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/errors/api_exception.dart';
 import '../../domain/entities/owned_card.dart';
 import '../providers/collection_provider.dart';
+import '../providers/deck_provider.dart';
 import '../widgets/game_card_widget.dart';
-import 'matchmaking_page.dart';
 
 /// Tamaño de mazo — regla de juego fija (igual que `DECK_SIZE` en
 /// `match_engine.py`), no un valor de negocio configurable, así que vive
 /// como constante acá en vez de en una tabla paramétrica.
 const int _deckSize = 10;
 
+/// Crea o edita un mazo guardado — ya no arma-y-encola directo (eso ahora
+/// pasa por [MyDecksPage], que entra a matchmaking con un mazo ya
+/// guardado). Con `deckId` null es "crear nuevo"; con `deckId` seteado es
+/// "editar", precargado con `initialName`/`initialCardIds`.
 class DeckBuilderPage extends ConsumerStatefulWidget {
-  const DeckBuilderPage({super.key});
+  final String? deckId;
+  final String? initialName;
+  final Set<String>? initialCardIds;
+
+  const DeckBuilderPage({
+    super.key,
+    this.deckId,
+    this.initialName,
+    this.initialCardIds,
+  });
+
+  bool get isEditing => deckId != null;
 
   @override
   ConsumerState<DeckBuilderPage> createState() => _DeckBuilderPageState();
@@ -21,12 +36,22 @@ class DeckBuilderPage extends ConsumerStatefulWidget {
 
 class _DeckBuilderPageState extends ConsumerState<DeckBuilderPage> {
   late Future<List<OwnedCardEntity>> _cardsFuture;
-  final Set<String> _selected = {};
+  late final Set<String> _selected;
+  late final TextEditingController _nameController;
+  bool _saving = false;
 
   @override
   void initState() {
     super.initState();
+    _selected = {...?widget.initialCardIds};
+    _nameController = TextEditingController(text: widget.initialName ?? '');
     _loadCards();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
   }
 
   void _loadCards() {
@@ -48,10 +73,32 @@ class _DeckBuilderPageState extends ConsumerState<DeckBuilderPage> {
     });
   }
 
-  void _confirmDeck() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (context) => MatchmakingPage(deck: _selected.toList())),
-    );
+  bool get _canSave => _selected.length == _deckSize && _nameController.text.trim().isNotEmpty;
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      final repository = ref.read(deckRepositoryProvider);
+      final name = _nameController.text.trim();
+      if (widget.isEditing) {
+        await repository.updateDeck(deckId: widget.deckId!, name: name, playerCardIds: _selected.toList());
+      } else {
+        await repository.createDeck(name: name, playerCardIds: _selected.toList());
+      }
+      if (mounted) Navigator.of(context).pop();
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo guardar el mazo. Intentá de nuevo.')),
+        );
+      }
+    }
   }
 
   @override
@@ -61,7 +108,10 @@ class _DeckBuilderPageState extends ConsumerState<DeckBuilderPage> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text('ARMÁ TU MAZO', style: TextStyle(letterSpacing: 3, fontWeight: FontWeight.bold)),
+        title: Text(
+          widget.isEditing ? 'EDITAR MAZO' : 'NUEVO MAZO',
+          style: const TextStyle(letterSpacing: 3, fontWeight: FontWeight.bold),
+        ),
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -74,6 +124,24 @@ class _DeckBuilderPageState extends ConsumerState<DeckBuilderPage> {
         child: SafeArea(
           child: Column(
             children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                child: TextField(
+                  controller: _nameController,
+                  onChanged: (_) => setState(() {}),
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Nombre del mazo',
+                    labelStyle: const TextStyle(color: Colors.white54),
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.05),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ),
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
@@ -169,16 +237,22 @@ class _DeckBuilderPageState extends ConsumerState<DeckBuilderPage> {
                     ),
                     const Spacer(),
                     ElevatedButton(
-                      onPressed: _selected.length == _deckSize ? _confirmDeck : null,
+                      onPressed: _canSave && !_saving ? _save : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.deepPurpleAccent,
                         padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                       ),
-                      child: const Text(
-                        'BUSCAR PARTIDA',
-                        style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
-                      ),
+                      child: _saving
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                            )
+                          : const Text(
+                              'GUARDAR',
+                              style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
+                            ),
                     ),
                   ],
                 ),
