@@ -265,3 +265,34 @@ nombre" (no solo recordar el último usado). 7 tareas (#38-44).
   passed (sin tests nuevos de widget para `MyDecksPage`/`DeckBuilderPage`
   editado — cubierto por la verificación end-to-end en browser real en su
   lugar, dado el tiempo ya invertido en esta ronda).
+- **Senior Review (793abf4/e0ec81e) — 10 hallazgos, push aprobado sin
+  corregir (decisión explícita de Luis: "push ya, arreglar después")**.
+  Quedan pendientes como deuda técnica documentada, no perdida:
+  - Race condition (TOCTOU) real en el tope de 20 mazos: `create_deck`
+    hace `SELECT count(*)` y luego `INSERT` sin lock — dos requests
+    concurrentes pueden dejar a un usuario con 21+ mazos.
+  - N+1 en `list_decks` (1 query de mazos + 1 query de cartas por mazo).
+  - `_validate_deck_cards` carga las cartas propias solo para contar,
+    las descarta, y `_deck_out` las vuelve a consultar segundos después.
+  - `_replace_deck_cards` ejecuta un `DELETE` garantizado no-op en
+    `create_deck` (el `deck.id` es un UUID recién generado).
+  - `MyDecksPage._createNew/_edit/_delete` no chequean `mounted` tras
+    un `await` (Navigator.push / showDialog), a diferencia del resto
+    del código (login/register/profile/gacha-config sí lo hacen).
+  - `_MAX_DECKS_PER_USER = 20` hardcodeado — posible choque con la regla
+    global de CLAUDE.md (umbrales de negocio en tabla paramétrica, no en
+    código), aunque el comentario del código lo justifica como tope
+    defensivo, no de negocio — pendiente de confirmación explícita de Luis.
+  - La remoción de "jugar sin guardar" (ver arriba) fue una decisión de
+    UX tomada durante la implementación, documentada pero no escalada
+    formalmente como decisión de negocio antes de aplicarla — pendiente
+    de confirmación retroactiva de Luis.
+  - `OwnedCardOut` se construye por separado y de forma idéntica en
+    `decks.py` y `cards.py` (no se extrajo junto con `load_owned_cards`).
+  - El boilerplate de `FutureBuilder` (loading/error/reintentar) está
+    duplicado ahora en 4 páginas (`MyDecksPage`, `marketplace_page.dart`,
+    `deck_builder_page.dart`, `gacha_config_admin_page.dart`).
+  - El campo de nombre en `DeckBuilderPage` usa
+    `onChanged: (_) => setState(() {})`, recontruyendo toda la página
+    (incluido el grid de cartas) en cada tecla, cuando solo el estado
+    del botón Guardar necesita reaccionar al nombre.
