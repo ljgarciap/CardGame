@@ -75,7 +75,14 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          # Pineado a la misma versión que se usa en desarrollo local, no
+          # "stable" (canal móvil). El Flutter stable actual (3.44.x) trae
+          # un SDK de Dart donde IconData pasó a ser `final class`, lo que
+          # rompe la compilación de font_awesome_flutter 10.x (extiende
+          # IconData) — requiere migrar a font_awesome_flutter 11.0.0
+          # (breaking: Icon->FaIcon, find.byIcon(...).data) antes de poder
+          # subir de versión. Ver docs/memory.md 2026-07-17.
+          flutter-version: "3.32.8"
 
       - name: Instalar dependencias
         run: flutter pub get

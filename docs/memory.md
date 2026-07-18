@@ -413,3 +413,17 @@ formal no aplica (rol no activado todavía en CardGame).
   backend y 34 de frontend pasando. Es solo testing en runners de GitHub,
   no depliega a ningún servidor — el CD real (deploy al VPS) queda
   pendiente aparte, para cuando exista esa infraestructura.
+- **CI — primer run real reveló deuda de versión**: el primer push a
+  GitHub Actions falló en frontend (backend pasó limpio). Causa: el canal
+  `stable` de `subosito/flutter-action` bajó Flutter 3.44.6, cuyo SDK de
+  Dart marca `IconData` como `final class` — rompe la compilación de
+  `font_awesome_flutter` 10.x (pin actual `^10.9.1`, resuelve a 10.12.0),
+  que extiende esa clase. En local (Flutter 3.32.8, ~1 año desactualizado)
+  no se veía porque esa versión de Flutter no tiene el cambio. El fix de
+  fondo es `font_awesome_flutter` 11.0.0, pero es un breaking change real
+  (`Icon`→`FaIcon`, `find.byIcon(...)` pasa a requerir `.data`) que toca
+  varios archivos — no se hizo de paso arreglando el CI. Solución
+  temporal: `ci.yml` pinea `flutter-version: "3.32.8"` (la misma que se
+  usa en desarrollo local) en vez de `channel: stable`. **Pendiente**:
+  actualizar Flutter local + migrar a `font_awesome_flutter` 11.0.0 en
+  una tarea separada, y recién ahí destrabar `channel: stable` en CI.
