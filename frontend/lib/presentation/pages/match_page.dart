@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/entities/match_state.dart';
@@ -55,6 +56,43 @@ class _MatchPageState extends ConsumerState<MatchPage> {
 
   void _playCard(CardInPlayEntity card) {
     ref.read(matchNotifierProvider.notifier).playCard(card.playerCardId);
+  }
+
+  void _showCardDetail(CardInPlayEntity card) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // GameCardWidget necesita una altura acotada del padre (tiene un
+            // Expanded adentro para el ícono central) -- en _cardRow se la
+            // da el SizedBox del ListView horizontal; acá, sin un SizedBox
+            // explícito, Dialog + Column(mainAxisSize: min) le pasan altura
+            // sin acotar y explota el layout (encontrado con un test real,
+            // no era solo cosmético).
+            SizedBox(
+              height: 400,
+              child: GameCardWidget(
+                name: card.name,
+                faction: card.faction,
+                rank: card.rank,
+                rarity: card.rarity,
+                attack: card.attack,
+                defense: card.currentDefense ?? card.maxDefense,
+                width: 280,
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('CERRAR', style: TextStyle(color: Colors.white70)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _leaveMatch() async {
@@ -182,7 +220,12 @@ class _MatchPageState extends ConsumerState<MatchPage> {
     return Column(
       children: [
         _opponentInfo(state, uiState.opponentUsername, targeting),
-        _cardRow(state.opponentBoard, height: 170, onTap: targeting ? _attackCard : null),
+        _cardRow(
+          state.opponentBoard,
+          height: 170,
+          onTap: targeting ? _attackCard : null,
+          onLongPress: _showCardDetail,
+        ),
         const Divider(color: Colors.white12, height: 24),
         _turnBanner(state),
         const Spacer(),
@@ -190,6 +233,7 @@ class _MatchPageState extends ConsumerState<MatchPage> {
           state.yourBoard,
           height: 190,
           onTap: (card) => _selectAttacker(card, state.yourTurn),
+          onLongPress: _showCardDetail,
           selectedId: _selectedAttackerId,
         ),
         const SizedBox(height: 8),
@@ -197,6 +241,7 @@ class _MatchPageState extends ConsumerState<MatchPage> {
           state.yourHand,
           height: 190,
           onTap: state.yourTurn ? _playCard : null,
+          onLongPress: _showCardDetail,
         ),
         _yourInfo(state),
       ],
@@ -256,36 +301,61 @@ class _MatchPageState extends ConsumerState<MatchPage> {
             onPressed: () => ref.read(matchNotifierProvider.notifier).forfeit(),
             child: const Text('Rendirse', style: TextStyle(color: Colors.white38)),
           ),
-          ElevatedButton(
-            onPressed: state.yourTurn
-                ? () {
-                    ref.read(matchNotifierProvider.notifier).endTurn();
-                    setState(() => _selectedAttackerId = null);
-                  }
-                : null,
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurpleAccent),
-            child: const Text('Terminar turno'),
-          ),
         ],
       ),
     );
   }
 
+  /// Cuando es tu turno, el cartel ES el botón para terminarlo — antes
+  /// había un botón chico separado abajo del todo, lejos de este cartel
+  /// (que es justo donde mirás para saber de quién es el turno). Tenerlos
+  /// juntos, en vez de en puntas opuestas de la pantalla, es lo que hace
+  /// obvio cómo pasar de turno.
   Widget _turnBanner(MatchStateEntity state) {
-    return Text(
-      state.yourTurn ? 'TU TURNO' : 'TURNO DEL RIVAL',
-      style: TextStyle(
-        color: state.yourTurn ? Colors.greenAccent : Colors.white38,
-        fontWeight: FontWeight.bold,
-        letterSpacing: 2,
+    if (!state.yourTurn) {
+      return const Text(
+        'TURNO DEL RIVAL',
+        style: TextStyle(color: Colors.white38, fontWeight: FontWeight.bold, letterSpacing: 2),
+      );
+    }
+
+    return GestureDetector(
+      onTap: () {
+        ref.read(matchNotifierProvider.notifier).endTurn();
+        setState(() => _selectedAttackerId = null);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.greenAccent.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.greenAccent, width: 2),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'TU TURNO — TOCÁ PARA TERMINAR',
+              style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, letterSpacing: 1),
+            ),
+            SizedBox(width: 8),
+            Icon(Icons.arrow_forward, color: Colors.greenAccent, size: 18),
+          ],
+        ),
       ),
-    );
+    ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(
+          begin: const Offset(1, 1),
+          end: const Offset(1.04, 1.04),
+          duration: 900.ms,
+          curve: Curves.easeInOut,
+        );
   }
 
   Widget _cardRow(
     List<CardInPlayEntity> cards, {
     required double height,
     void Function(CardInPlayEntity card)? onTap,
+    void Function(CardInPlayEntity card)? onLongPress,
     String? selectedId,
   }) {
     if (cards.isEmpty) {
@@ -313,6 +383,7 @@ class _MatchPageState extends ConsumerState<MatchPage> {
               summoningSick: card.summoningSick ?? false,
               disabled: card.hasAttackedThisTurn ?? false,
               onTap: onTap == null ? null : () => onTap(card),
+              onLongPress: onLongPress == null ? null : () => onLongPress(card),
             ),
           );
         },

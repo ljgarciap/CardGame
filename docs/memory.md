@@ -811,3 +811,42 @@ formal no aplica (rol no activado todavía en CardGame).
     real jugada contra el backend en vivo (no solo tests): `match_found`
     con `opponent_username: "Eco"`, el bot jugó y atacó solo, partida
     terminada por `life_zero` con el bot como ganador.
+- **2 hallazgos de UX en `MatchPage` (tablero de combate), reportados por
+  Luis tras jugar de verdad — ambos arreglados**:
+  1. **"No queda fácil saber cómo cambio de turno"**: el botón "Terminar
+     turno" vivía abajo del todo (al lado de "Rendirse"), lejos del
+     cartel "TU TURNO"/"TURNO DEL RIVAL" que está arriba del tablero —
+     pantalla entera de distancia entre "date cuenta que es tu turno" y
+     "acá está el botón". Arreglado: el cartel mismo ahora ES el botón
+     cuando es tu turno (`_turnBanner` en `match_page.dart`) — texto "TU
+     TURNO — TOCÁ PARA TERMINAR" con pulso animado para atraer el ojo, se
+     saca el botón viejo de abajo (quedaría duplicado/confuso).
+  2. **"No puedo ver el detalle de las cartas"**: `GameCardWidget` no
+     mostraba la rareza como texto en ningún lado (solo el color del
+     borde la indicaba) y tocar una carta ya dispara jugarla/seleccionarla
+     como atacante, sin forma de "solo mirarla". Arreglado: rareza como
+     texto en el header de la carta (reemplaza un ícono de rayo puramente
+     decorativo, gratis en todos lados que usan `GameCardWidget` —
+     marketplace, colección, no solo combate) + mantener presionada
+     (`onLongPress`, no toque simple, para no chocar con jugar/atacar)
+     abre un diálogo con la carta agrandada.
+  - **Bug real encontrado escribiendo el test del diálogo, no solo
+    cosmético**: `GameCardWidget` tiene un `Expanded` adentro (para el
+    ícono central), necesita que el padre le dé una altura acotada — en
+    `_cardRow` se la da el `SizedBox` del `ListView` horizontal, pero el
+    diálogo de detalle nuevo la ponía directo en un `Column` sin acotar
+    (`Dialog` + `Column(mainAxisSize: min)` no acotan altura), tirando una
+    excepción de layout real en la app, no solo en el test. Arreglado con
+    un `SizedBox(height: 400, ...)` envolviendo la carta del diálogo.
+  - **Otros dos hallazgos de testing, para el próximo que escriba un test
+    de una pantalla animada/grande**: (1) `Future.delayed(Duration.zero)`
+    en un `testWidgets` cuelga para siempre — en el entorno de test los
+    timers reales no avanzan solos, solo lo hacen dentro de
+    `tester.pump()`; nunca usar `Future.delayed` crudo en un test de
+    widget, usar `tester.pump()` para dejar que se procesen los
+    microtasks pendientes (ej. un mensaje emitido por un stream fake).
+    (2) El tablero completo no entra en la superficie de test por defecto
+    (800x600) — mismo ajuste (`tester.binding.setSurfaceSize(...)`) que
+    ya hizo falta en `admin_coins_page_test.dart`.
+  - 4 tests nuevos en `test/presentation/match_page_test.dart`. 65 tests
+    frontend pasan.

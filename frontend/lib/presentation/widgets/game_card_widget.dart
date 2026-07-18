@@ -24,6 +24,10 @@ class GameCardWidget extends StatelessWidget {
   /// ícono de luna, para no comunicar el motivo equivocado.
   final bool disabled;
   final VoidCallback? onTap;
+  /// Mantener presionado, no tocar — un toque simple ya dispara jugar la
+  /// carta o seleccionarla como atacante según la pantalla, así que "solo
+  /// mirar el detalle" necesita un gesto distinto que no choque con eso.
+  final VoidCallback? onLongPress;
 
   const GameCardWidget({
     super.key,
@@ -38,6 +42,7 @@ class GameCardWidget extends StatelessWidget {
     this.summoningSick = false,
     this.disabled = false,
     this.onTap,
+    this.onLongPress,
   });
 
   Color get _rarityColor {
@@ -60,6 +65,7 @@ class GameCardWidget extends StatelessWidget {
 
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -93,7 +99,15 @@ class GameCardWidget extends StatelessWidget {
                           rank.displayLabel,
                           style: TextStyle(fontSize: 10 * scale, color: color, fontWeight: FontWeight.bold),
                         ),
-                        FaIcon(FontAwesomeIcons.bolt, size: 12 * scale, color: color),
+                        // Antes había un ícono de rayo puramente decorativo
+                        // acá — la rareza solo se distinguía por el color
+                        // del borde, sin ningún texto. Mostrarla también
+                        // como texto no depende de que el usuario reconozca
+                        // el color.
+                        Text(
+                          rarity.name.toUpperCase(),
+                          style: TextStyle(fontSize: 10 * scale, color: color, fontWeight: FontWeight.bold),
+                        ),
                       ],
                     ),
                   ),
