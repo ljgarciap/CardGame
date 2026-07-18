@@ -1,17 +1,23 @@
 import 'package:card_game/core/errors/api_exception.dart';
 import 'package:card_game/domain/entities/gacha_config.dart';
+import 'package:card_game/domain/entities/user_account.dart';
 import 'package:card_game/presentation/pages/marketplace_page.dart';
 import 'package:card_game/presentation/pages/pack_opening_page.dart';
+import 'package:card_game/presentation/providers/auth_provider.dart';
 import 'package:card_game/presentation/providers/pack_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'fake_auth_repository.dart';
 import 'fake_pack_repository.dart';
 
-Widget _appWith(FakePackRepository repository) {
+Widget _appWith(FakePackRepository repository, {FakeAuthRepository? authRepository}) {
   return ProviderScope(
-    overrides: [packRepositoryProvider.overrideWithValue(repository)],
+    overrides: [
+      packRepositoryProvider.overrideWithValue(repository),
+      authRepositoryProvider.overrideWithValue(authRepository ?? FakeAuthRepository()),
+    ],
     child: const MaterialApp(home: MarketplacePage()),
   );
 }
@@ -63,5 +69,29 @@ void main() {
 
     final page = tester.widget<PackOpeningPage>(find.byType(PackOpeningPage));
     expect(page.level, 3);
+  });
+
+  testWidgets('muestra el saldo de coins del usuario en el AppBar', (tester) async {
+    final repository = FakePackRepository(
+      levelsToReturn: [
+        GachaPackLevelConfig(level: 1, price: 1500, cardsPerPack: 5, guaranteedMinRank: null),
+      ],
+    );
+    final authRepository = FakeAuthRepository(
+      storedToken: 'token',
+      profile: UserAccountEntity(
+        id: 'user-1',
+        email: 'a@a.com',
+        username: 'player_one',
+        avatarId: 'avatar_1',
+        coins: 750,
+        emailVerified: true,
+        isSuperadmin: false,
+      ),
+    );
+    await tester.pumpWidget(_appWith(repository, authRepository: authRepository));
+    await _pumpUntilLoaded(tester);
+
+    expect(find.text('750'), findsOneWidget);
   });
 }

@@ -634,3 +634,45 @@ formal no aplica (rol no activado todavía en CardGame).
   costo mecánico sin ningún beneficio funcional. Si en algún momento se
   quiere el rename completo, es un refactor aparte, no algo para colar de
   paso.
+- **3 hallazgos de UX (UX/UI + Game Expert) reportados por Luis, los 3
+  arreglados**:
+  1. **Sin marca en pantallas de auth**: `AuthScaffold` (compartido por
+     Login/Register/ForgotPassword/ResetPassword/VerifyEmailPending/Profile/
+     ChangePassword — 7 pantallas) solo mostraba el título propio de cada
+     pantalla, nunca "MYTHOS". Un usuario nuevo no veía el nombre del juego
+     antes de loguearse. Arreglado: wordmark "MYTHOS" chico arriba del
+     título, un solo fix cubre las 7 pantallas.
+  2. **"No sé cómo volver"**: ninguna de esas 7 pantallas tenía un botón de
+     volver visible — dependían 100% del gesto de atrás del navegador/SO.
+     `AuthScaffold` ahora tiene un `AppBar` transparente sin título propio:
+     Flutter agrega la flecha de volver sola cuando
+     `Navigator.canPop()` es true (ForgotPassword/Profile/ChangePassword/
+     ResetPassword/VerifyEmailPending llegando por `push`) y no la agrega
+     cuando es false (Login, o Register/VerifyEmailPending llegando por
+     `pushReplacement`) — resuelve las 7 pantallas sin decidir a mano cuál
+     necesita botón. Para lograr que el gradiente de fondo cubriera también
+     la franja del AppBar sin que el contenido quedara tapado detrás, hubo
+     que sacar el gradiente del `body` y ponerlo en un `Container` externo
+     que envuelve todo el `Scaffold` (con `Scaffold.backgroundColor` y
+     `AppBar.backgroundColor` ambos transparentes) — la alternativa
+     (`extendBodyBehindAppBar: true` + `SafeArea` normal) tapaba el
+     wordmark/título detrás de la barra.
+     - **Pendiente, NO resuelto hoy, anotado para el Architect**: el botón
+       de atrás del navegador en Flutter Web sigue sin estar conectado al
+       stack de navegación de la app — la app usa `Navigator.push`/
+       `MaterialPageRoute` puro, sin rutas nombradas ni router (`go_router`
+       o similar). El botón de volver *dentro* de la app ya funciona bien
+       después de este fix; el botón *del navegador* seguiría sin andar. Es
+       un cambio de arquitectura más grande, deliberadamente fuera de
+       alcance de este arreglo puntual.
+  3. **Sin saldo de coins en Marketplace**: `MarketplacePage` nunca leía el
+     perfil del usuario, solo mostraba el precio de cada sobre. Arreglado:
+     `AppBar.actions` con ícono + monto, mismo patrón que ya existía en
+     `ProfilePage`, leyendo `authNotifierProvider` — se actualiza solo
+     después de abrir un sobre porque `PackOpeningPage` ya refresca el
+     perfil (`refreshProfile()`).
+  - Los 3 con tests de regresión nuevos: `auth_scaffold_test.dart` (3
+    tests: wordmark visible, sin botón de volver en la raíz, con botón de
+    volver llegando por `push`) + un test nuevo en
+    `marketplace_page_test.dart` (saldo de coins visible). 53 tests
+    frontend pasan (49 + 4 nuevos).

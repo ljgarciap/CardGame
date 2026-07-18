@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../../domain/entities/gacha_config.dart';
+import '../providers/auth_provider.dart';
 import '../providers/pack_provider.dart';
 import '../widgets/async_future_view.dart';
 import 'pack_opening_page.dart';
@@ -46,12 +47,30 @@ class _MarketplacePageState extends ConsumerState<MarketplacePage> {
 
   @override
   Widget build(BuildContext context) {
+    final coins = ref.watch(authNotifierProvider).user?.coins;
+
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: const Text('MARKETPLACE', style: TextStyle(letterSpacing: 4, fontWeight: FontWeight.bold)),
+        actions: [
+          if (coins != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 20),
+              child: Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const FaIcon(FontAwesomeIcons.coins, color: Colors.amber, size: 16),
+                    const SizedBox(width: 6),
+                    Text('$coins', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
       body: Container(
         decoration: const BoxDecoration(
