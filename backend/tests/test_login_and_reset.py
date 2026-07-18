@@ -195,3 +195,71 @@ def test_reset_password_rejects_expired_token(client, db_session, sent_emails):
         json={"token": user.reset_token, "new_password": "brandnewpassword123"},
     )
     assert response.status_code == 400
+
+
+# --- change-password (logueado) ---
+
+
+def _login_and_get_token(client, db_session, **overrides) -> str:
+    _register_and_verify(client, db_session, **overrides)
+    response = client.post(
+        "/api/auth/login",
+        json={
+            "email": overrides.get("email", "player1@example.com"),
+            "password": VALID_PASSWORD,
+        },
+    )
+    return response.json()["access_token"]
+
+
+def test_change_password_requires_auth(client):
+    response = client.post(
+        "/api/auth/change-password",
+        json={"current_password": VALID_PASSWORD, "new_password": "brandnewpassword123"},
+    )
+    assert response.status_code == 401
+
+
+def test_change_password_rejects_wrong_current_password(client, db_session):
+    token = _login_and_get_token(client, db_session)
+
+    response = client.post(
+        "/api/auth/change-password",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"current_password": "notthecurrentone", "new_password": "brandnewpassword123"},
+    )
+    assert response.status_code == 400
+
+
+def test_change_password_success_allows_login_with_new_password(client, db_session):
+    token = _login_and_get_token(client, db_session)
+
+    response = client.post(
+        "/api/auth/change-password",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"current_password": VALID_PASSWORD, "new_password": "brandnewpassword123"},
+    )
+    assert response.status_code == 200
+
+    old_password_login = client.post(
+        "/api/auth/login",
+        json={"email": "player1@example.com", "password": VALID_PASSWORD},
+    )
+    assert old_password_login.status_code == 401
+
+    new_password_login = client.post(
+        "/api/auth/login",
+        json={"email": "player1@example.com", "password": "brandnewpassword123"},
+    )
+    assert new_password_login.status_code == 200
+
+
+def test_change_password_rejects_weak_new_password(client, db_session):
+    token = _login_and_get_token(client, db_session)
+
+    response = client.post(
+        "/api/auth/change-password",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"current_password": VALID_PASSWORD, "new_password": "short"},
+    )
+    assert response.status_code == 422

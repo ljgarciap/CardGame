@@ -74,6 +74,22 @@ class AuthRemoteDatasource extends BaseRemoteDatasource {
     return decodeOrThrow(response);
   }
 
+  Future<Map<String, dynamic>> changePassword({
+    required String token,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final response = await client.post(
+      uri('/api/auth/change-password'),
+      headers: authHeaders(token),
+      body: jsonEncode({
+        'current_password': currentPassword,
+        'new_password': newPassword,
+      }),
+    );
+    return decodeOrThrow(response);
+  }
+
   Future<Map<String, dynamic>> getMe({required String token}) async {
     final response = await client.get(
       uri('/api/users/me'),

@@ -59,6 +59,7 @@ echo "==> Corriendo seeds (idempotentes)..."
 python -m app.db.seed
 python -m app.db.seed_gacha_config
 python -m app.db.seed_deck_config
+python -m app.db.seed_superadmin
 
 echo "==> Mailhog UI: http://localhost:8025"
 echo "==> Backend arrancando en http://localhost:${BACKEND_PORT} (Ctrl+C para detener)"

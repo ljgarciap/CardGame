@@ -6,11 +6,13 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_current_user
 from app.core.email import send_email
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.auth import (
+    ChangePasswordRequest,
     LoginRequest,
     MessageResponse,
     RegisterRequest,
@@ -221,6 +223,24 @@ async def reset_password(payload: ResetPasswordRequest, db: Session = Depends(ge
     user.password_hash = hash_password(payload.new_password)
     user.reset_token = None
     user.reset_token_expires_at = None
+    db.commit()
+
+    return MessageResponse(message="Contraseña actualizada correctamente")
+
+
+@router.post("/change-password", response_model=MessageResponse)
+async def change_password(
+    payload: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Contraseña actual incorrecta",
+        )
+
+    current_user.password_hash = hash_password(payload.new_password)
     db.commit()
 
     return MessageResponse(message="Contraseña actualizada correctamente")

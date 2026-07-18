@@ -64,6 +64,22 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final token = await _tokenStorage.read();
+    if (token == null) {
+      throw ApiException(statusCode: 401, message: 'No autenticado');
+    }
+    await _remote.changePassword(
+      token: token,
+      currentPassword: currentPassword,
+      newPassword: newPassword,
+    );
+  }
+
+  @override
   Future<UserAccountEntity> getMe() async {
     final token = await _tokenStorage.read();
     if (token == null) {

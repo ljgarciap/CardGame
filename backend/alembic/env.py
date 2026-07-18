@@ -16,6 +16,7 @@ from app.models import card_archetype  # noqa: E402,F401
 from app.models import player_card  # noqa: E402,F401
 from app.models import gacha_config  # noqa: E402,F401
 from app.models import deck  # noqa: E402,F401
+from app.models import coin_grant  # noqa: E402,F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

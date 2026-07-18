@@ -10,12 +10,25 @@ class AuthState {
   final AuthStatus status;
   final UserAccountEntity? user;
 
-  const AuthState({required this.status, this.user});
+  /// Toggle solo de UI para un superadmin: no cambia nada en el backend
+  /// (`user.isSuperadmin` sigue siendo el permiso real, el backend igual
+  /// devuelve 403 para cualquier endpoint admin si no lo es) — solo oculta
+  /// la navegación admin para que el superadmin pueda navegar la app "como
+  /// jugador". Se resetea a false en cada login/restauración de sesión.
+  final bool viewAsPlayer;
+
+  const AuthState({required this.status, this.user, this.viewAsPlayer = false});
 
   const AuthState.unknown() : this(status: AuthStatus.unknown);
   const AuthState.unauthenticated() : this(status: AuthStatus.unauthenticated);
   const AuthState.authenticated(UserAccountEntity user)
       : this(status: AuthStatus.authenticated, user: user);
+
+  AuthState copyWith({bool? viewAsPlayer}) => AuthState(
+        status: status,
+        user: user,
+        viewAsPlayer: viewAsPlayer ?? this.viewAsPlayer,
+      );
 }
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) => AuthRepositoryImpl());
@@ -68,6 +81,10 @@ class AuthNotifier extends Notifier<AuthState> {
     } catch (_) {
       await logout();
     }
+  }
+
+  void toggleViewAsPlayer() {
+    state = state.copyWith(viewAsPlayer: !state.viewAsPlayer);
   }
 }
 

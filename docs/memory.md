@@ -486,3 +486,50 @@ formal no aplica (rol no activado todavía en CardGame).
     visualmente en la UI real (extensión de Chrome no conectada en esta
     sesión). Si algún día se ve un token roto al copiarlo de Mailhog,
     empezar por acá.
+
+- **Superadmin convertido a mano**: `luis@luis.co` (username `squall`,
+  registrado por Luis vía la UI) fue promovido a superadmin directo en la
+  base (`UPDATE users SET is_superadmin = true`) — no hay endpoint para
+  auto-otorgarse el flag, es la única vía hoy. Se perdió después en una
+  corrida de `pytest` (mismo gotcha del `drop_all` de arriba) y Luis tuvo
+  que volver a registrarse.
+- **4 features nuevas a pedido de Luis, todas implementadas y probadas
+  end-to-end contra Mailhog/Postgres reales** (174 tests backend + 49
+  frontend, ambos en verde):
+  1. **Multirol (UI-only)**: `AuthState.viewAsPlayer` en
+     `auth_provider.dart` — toggle "VER COMO JUGADOR"/"VOLVER A MODO
+     ADMIN" en `ProfilePage`, visible solo si `isSuperadmin`. No toca el
+     backend ni el JWT: `is_superadmin` sigue siendo el permiso real, el
+     toggle solo oculta la navegación admin para que un superadmin pueda
+     navegar la app como jugador. Se resetea a `false` en cada
+     login/restauración de sesión (no persiste).
+  2. **Otorgar coins** (`app/api/admin/coins.py`, superadmin-only):
+     `POST /grant` (por email o username, premio individual) y
+     `POST /broadcast` (a todos los usuarios, evento — `UPDATE` en bloque,
+     no trae filas a Python). Ambos validan `amount > 0` (422 si no) y
+     quedan auditados en la tabla nueva `coin_grants`
+     (`granted_by_id`, `target_user_id` nullable = broadcast,
+     `recipient_count` solo se completa en broadcasts) — decisión de
+     Luis: sí quería historial. `GET /history` lista los últimos 200.
+     Frontend: `AdminCoinsPage` — el broadcast pide confirmación en un
+     diálogo antes de ejecutar (irreversible, afecta a todos).
+  3. **Cambiar contraseña logueado**: `POST /api/auth/change-password`
+     (requiere `current_password`, valida contra el hash real, 400 si no
+     matchea) — distinto del flujo de reset por email que ya existía
+     (`reset-password`, sin sesión, con token). `ChangePasswordPage`
+     nueva, accesible para cualquier usuario desde `ProfilePage`.
+  4. **Seed de superadmin** (`app/db/seed_superadmin.py`, idempotente,
+     wireado en `scripts/dev-up.sh`): `lujogarpin78@gmail.com` /
+     `lionheartsq` / password `12345678` — genérica a propósito, **nunca
+     correr este seed contra un ambiente real**, es la única forma de
+     tener un primer superadmin sin editar la base a mano (no hay
+     endpoint para auto-otorgarse el flag). Username `lionheartsq` chocaba
+     con un usuario de prueba viejo sin verificar (`test@example.com`) —
+     se borró antes de correr el seed (decisión de Luis).
+  - Migración `3ad75176b9c6_create_coin_grants_table.py`. Nota de
+    higiene: `app/models/deck_config.py` **no** está importado en
+    `alembic/env.py` (gap preexistente, no introducido acá) — si algún
+    día se corre `alembic revision --autogenerate`, Alembic no lo va a
+    ver en `target_metadata` y puede proponer un `DROP TABLE
+    deck_config`. Se agregó el import de `coin_grant` sí, para que este
+    modelo no caiga en el mismo agujero.

@@ -62,5 +62,15 @@ class ResetPasswordRequest(BaseModel):
         return validators.validate_password(v)
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, v: str) -> str:
+        return validators.validate_password(v)
+
+
 class MessageResponse(BaseModel):
     message: str

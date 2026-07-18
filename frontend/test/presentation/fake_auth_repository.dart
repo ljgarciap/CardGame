@@ -9,6 +9,7 @@ class FakeAuthRepository implements AuthRepository {
   ApiException? loginError;
   ApiException? updateError;
   ApiException? verifyEmailError;
+  ApiException? changePasswordError;
 
   FakeAuthRepository({this.storedToken, this.profile});
 
@@ -55,6 +56,14 @@ class FakeAuthRepository implements AuthRepository {
     required String token,
     required String newPassword,
   }) async {}
+
+  @override
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    if (changePasswordError != null) throw changePasswordError!;
+  }
 
   @override
   Future<UserAccountEntity> getMe() async {

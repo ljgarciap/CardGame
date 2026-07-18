@@ -8,6 +8,8 @@ import '../providers/auth_provider.dart';
 import '../widgets/auth_primary_button.dart';
 import '../widgets/auth_scaffold.dart';
 import '../widgets/auth_text_field.dart';
+import 'admin_coins_page.dart';
+import 'change_password_page.dart';
 import 'deck_config_admin_page.dart';
 import 'gacha_config_admin_page.dart';
 import 'login_page.dart';
@@ -71,7 +73,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    final user = ref.watch(authNotifierProvider).user;
+    final authState = ref.watch(authNotifierProvider);
+    final user = authState.user;
+    final showAdminNav = (user?.isSuperadmin ?? false) && !authState.viewAsPlayer;
 
     return AuthScaffold(
       title: 'MI PERFIL',
@@ -135,7 +139,33 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             isLoading: _isSaving,
             onPressed: _save,
           ),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ChangePasswordPage()),
+              );
+            },
+            icon: const FaIcon(FontAwesomeIcons.key, size: 16),
+            label: const Text('CAMBIAR CONTRASEÑA'),
+          ),
           if (user?.isSuperadmin ?? false) ...[
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: () =>
+                  ref.read(authNotifierProvider.notifier).toggleViewAsPlayer(),
+              icon: FaIcon(
+                authState.viewAsPlayer
+                    ? FontAwesomeIcons.userShield
+                    : FontAwesomeIcons.gamepad,
+                size: 16,
+              ),
+              label: Text(
+                authState.viewAsPlayer ? 'VOLVER A MODO ADMIN' : 'VER COMO JUGADOR',
+              ),
+            ),
+          ],
+          if (showAdminNav) ...[
             const SizedBox(height: 16),
             OutlinedButton.icon(
               onPressed: () {
@@ -155,6 +185,16 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               },
               icon: const FaIcon(FontAwesomeIcons.layerGroup, size: 16),
               label: const Text('ADMIN: CONFIG DE MAZOS'),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const AdminCoinsPage()),
+                );
+              },
+              icon: const FaIcon(FontAwesomeIcons.coins, size: 16),
+              label: const Text('ADMIN: OTORGAR COINS'),
             ),
           ],
           const SizedBox(height: 16),
