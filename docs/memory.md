@@ -427,3 +427,28 @@ formal no aplica (rol no activado todavía en CardGame).
   usa en desarrollo local) en vez de `channel: stable`. **Pendiente**:
   actualizar Flutter local + migrar a `font_awesome_flutter` 11.0.0 en
   una tarea separada, y recién ahí destrabar `channel: stable` en CI.
+
+## 2026-07-18
+- **Bug real: registro no funcionaba probando en local**. Causa raíz:
+  puerto 8000 también ocupado por `factoring_backend_web` (nginx del
+  proyecto Factoring, publicado en `0.0.0.0:8000`) — coexistiendo con
+  `uvicorn` del host en `127.0.0.1:8000`, `localhost:8000` resolvía a
+  uno u otro de forma intermitente (un `GET /docs` daba 200 contra
+  cualquiera de los dos, pero el `POST /api/auth/register` real caía en
+  el Laravel de Factoring → 404). Se movió el backend de CardGame a
+  **8001**: `scripts/dev-up.sh` (`BACKEND_PORT=8001`),
+  `docker-compose.override.yml` (backend `8001:8000`, para cuando corra
+  en Docker) y el default de `frontend/lib/core/api_config.dart`
+  (`http://localhost:8001`). Documentado en
+  `.claude/skills/run/SKILL.md`.
+- **Segundo bug, mismo intento de probar**: con el puerto ya corregido,
+  el registro daba 500 — `relation "users" does not exist`. La corrida
+  de `pytest` de la sesión anterior (validando la CI en local) dejó la
+  base sin tablas: el fixture `_setup_db` de `tests/conftest.py` hace
+  `Base.metadata.drop_all` al terminar cada test contra la misma base de
+  desarrollo, y no toca `alembic_version` — así que un `alembic upgrade
+  head` posterior no detecta nada pendiente y no las recrea. Arreglo:
+  `DROP SCHEMA public CASCADE` + `alembic upgrade head` + reseed.
+  Troubleshooting documentado en `.claude/skills/run/SKILL.md` — correr
+  `pytest` y probar la app a mano en la misma sesión no conviven sobre
+  la misma base sin resembrar entre medio.

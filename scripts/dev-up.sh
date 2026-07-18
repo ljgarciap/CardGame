@@ -9,6 +9,12 @@
 # Uso: ./scripts/dev-up.sh
 set -euo pipefail
 
+# 8000 está tomado en esta máquina por factoring_backend_web (nginx del
+# proyecto Factoring, publicado en 0.0.0.0:8000) — colisiona con uvicorn
+# en localhost:8000 de forma intermitente (según a qué proceso resuelva
+# "localhost" en cada request). Ver docs/memory.md 2026-07-18.
+BACKEND_PORT="${BACKEND_PORT:-8001}"
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
@@ -55,6 +61,6 @@ python -m app.db.seed_gacha_config
 python -m app.db.seed_deck_config
 
 echo "==> Mailhog UI: http://localhost:8025"
-echo "==> Backend arrancando en http://localhost:8000 (Ctrl+C para detener)"
+echo "==> Backend arrancando en http://localhost:${BACKEND_PORT} (Ctrl+C para detener)"
 echo "==> Frontend (otra terminal): cd frontend && flutter run -d chrome"
-exec uvicorn app.main:app --reload --port 8000
+exec uvicorn app.main:app --reload --port "$BACKEND_PORT"
