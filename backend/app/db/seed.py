@@ -60,15 +60,38 @@ ARCHETYPES = [
      "General deificado por su lealtad inquebrantable y su valor en combate."),
     (Faction.oriental, Rank.major_god, "Yu Huang, the Jade Emperor",
      "El Emperador de Jade, soberano del cielo y de todos los dioses."),
+
+    (Faction.muisca, Rank.hero, "Bochica, the Civilizer",
+     "Enseñó la agricultura y el tejido, y creó el Salto del Tequendama "
+     "para salvar a su pueblo de la gran inundación."),
+    (Faction.muisca, Rank.demigod, "Chibchacum, the Punished",
+     "Provocó la gran inundación por venganza; condenado a sostener la "
+     "tierra sobre sus hombros como castigo eterno."),
+    (Faction.muisca, Rank.minor_god, "Chía, Goddess of the Moon",
+     "Señora de la noche y los ciclos, a menudo en tensión con el orden "
+     "que impone Bochica."),
+    (Faction.muisca, Rank.major_god, "Bachué, the Original Mother",
+     "Emergió de la laguna de Iguaque para poblar la tierra, y volvió a "
+     "sus aguas convertida en serpiente."),
 ]
 
 
 def seed_archetypes(session: Session) -> None:
-    """Idempotent: no inserta nada si ya hay arquetipos sembrados."""
-    if session.query(CardArchetype).first() is not None:
-        return
+    """Idempotente por arquetipo individual (faction, rank), no por "¿hay
+    algo sembrado?" — el catálogo crece con el tiempo (nuevas facciones del
+    roadmap de expansiones, ver docs/specs/game-lore-tejido.md), así que un
+    chequeo global saltearía para siempre cualquier arquetipo agregado
+    después de la primera corrida. Bug real: así fue como el seed no sembró
+    los 4 arquetipos de Muisca en una base que ya tenía las otras 5
+    facciones."""
+    existing = {
+        (a.faction, a.rank)
+        for a in session.query(CardArchetype.faction, CardArchetype.rank)
+    }
 
     for faction, rank, name, description in ARCHETYPES:
+        if (faction, rank) in existing:
+            continue
         base = BASE_STATS[rank]
         session.add(
             CardArchetype(

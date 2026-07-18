@@ -562,3 +562,75 @@ formal no aplica (rol no activado todavía en CardGame).
     cardgame-mailhog-1` para replicar de verdad la ausencia de Mailhog de
     la CI, no confiar en que "pasa en local" cubre ese caso — se hizo
     recién después de este segundo fallo, no antes.
+- **Lore del universo (Game Expert) — spec aprobada, `docs/specs/game-lore-tejido.md`**:
+  Luis trajo una propuesta de worldbuilding (El Tejido, Memoria como
+  energía, la Gran Convergencia, El Cronista como rol del jugador) para
+  justificar por qué facciones de distintas mitologías conviven en el
+  mismo juego. Validado como Game Expert, con dos correcciones antes de
+  aprobar: (1) el framing de "los mitos mueren si nadie los recuerda" se
+  suaviza a "se debilitan y quedan en riesgo" (reversible en la ficción,
+  menos problemático culturalmente); (2) **Yoruba queda afuera** del
+  roster — tradición espiritual practicada activamente hoy, encuadrarla
+  como "en riesgo de desaparecer" resta legitimidad a una fe viva.
+  **Decisión de Luis, no negociable**: Muisca entra sí o sí (su propia
+  cultura) — como **sexta facción del roster actual**, no como expansión
+  futura. Roster aprobado: Bochica (Hero), Chibchacum (Demigod), Chía
+  (Minor God), Bachué (Major God); Huitaca queda documentada como
+  candidata a futuro. Impacto técnico real, más chico de lo esperado:
+  `gacha_service.generate_pack` elige facción con `uniform_choice`, sin
+  tabla de probabilidad por facción — agregar Muisca es un valor nuevo en
+  el enum `Faction` (¡ojo con la restricción de transacción de Postgres
+  para `ALTER TYPE ... ADD VALUE`!) + 4 arquetipos nuevos en el seed, no
+  hace falta tocar `gacha_rank_probabilities`/`gacha_rarity_probabilities`.
+  Balance: dilución pareja 20%→16.7% entre las 6 facciones, sin boost de
+  debut para Muisca (decisión explícita, por consistencia).
+- **Muisca implementado (Architect + Backend Dev)**: migración
+  `3f9efe66a45f_add_muisca_to_faction_enum.py` — `ALTER TYPE faction ADD
+  VALUE 'muisca'` sí puede correr dentro de una transacción en Postgres 15
+  (la restricción vieja de <12 ya no aplica); lo que sigue prohibido es
+  *usar* el valor en la misma transacción que lo agrega, y como esta
+  migración no lo usa (el seed corre después, en otra sesión), no hizo
+  falta partirla en dos ni forzar `AUTOCOMMIT`. `downgrade()` levanta
+  `NotImplementedError` a propósito — Postgres no soporta `DROP VALUE` de
+  un enum nativo bajo ninguna circunstancia, solo recrear el tipo entero.
+  Los 4 arquetipos de Muisca (Bochica/Chibchacum/Chía/Bachué, nombres y
+  descripciones del spec de arriba) se agregaron a `app/db/seed.py`.
+  - **Bug real encontrado al correr el seed**: `seed_archetypes` era
+    idempotente con un chequeo global ("¿hay algo sembrado? entonces no
+    toco nada"), así que en una base que ya tenía las otras 5 facciones,
+    correr el seed de nuevo no agregó los 4 de Muisca — quedó en 0 filas
+    nuevas. Corregido a idempotencia por arquetipo individual
+    `(faction, rank)`, con test de regresión nuevo
+    (`tests/test_seed.py`) que cubre exactamente este caso: sembrar de
+    cero, re-correr sin duplicar, y agregar solo lo que falta cuando ya
+    hay contenido parcial. Este patrón de idempotencia global-en-vez-de-
+    granular. Revisé los otros dos seeds para ver si comparten el riesgo:
+    `seed_deck_config` chequea `session.get(DeckConfig, 1) is not None` —
+    correcto tal cual, esa tabla es una fila única de verdad (id=1
+    siempre), no un catálogo que crece. `seed_gacha_config` sí tiene el
+    mismo patrón de chequeo global
+    (`session.query(GachaPackLevel).first() is not None`) que
+    `seed_archetypes` tenía — no rompió nada todavía porque nadie extendió
+    esa tabla desde que se creó, pero si en el futuro se agrega un nivel de
+    pack nuevo (nivel 6+) con este mismo chequeo, va a fallar en silencio
+    igual que pasó acá. No se tocó ahora (fuera de alcance de esta tarea),
+    queda anotado para cuando haga falta.
+  - Verificado con aperturas de sobre reales (10 sobres nivel 5 = 50
+    cartas): las 6 facciones aparecen, incluida Muisca. 177 tests backend
+    pasan (174 + 3 de `test_seed.py`), corrida también con Mailhog
+    apagado para replicar CI antes de pushear.
+- **Rebranding a MYTHOS** (pedido explícito de Luis, "el nombre ya
+  decidido debe cambiar en las vistas"): `main_menu_page.dart`
+  ("ANTIGRAVITY"/"CARD STUDIO" → "MYTHOS"/"EL TEJIDO", esto último es una
+  elección de Claude atada al lore recién aprobado, confirmar con Luis si
+  no es lo que esperaba), `main.dart` (`MaterialApp.title` → "MYTHOS"), y
+  toda la metadata de la app: `AndroidManifest.xml`
+  (`android:label`), `ios/Runner/Info.plist` (`CFBundleDisplayName` y
+  `CFBundleName`), `web/index.html` (`<title>`, meta description, apple
+  touch title), `web/manifest.json` (`name`/`short_name`/`description`).
+  **A propósito NO se tocó** `pubspec.yaml` (`name: card_game`) — es el
+  identificador del paquete Dart, cambiarlo obliga a renombrar
+  `package:card_game/...` en el import de cada archivo del frontend, alto
+  costo mecánico sin ningún beneficio funcional. Si en algún momento se
+  quiere el rename completo, es un refactor aparte, no algo para colar de
+  paso.

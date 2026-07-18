@@ -7,6 +7,7 @@ class Faction(str, enum.Enum):
     egyptian = "egyptian"
     aztec = "aztec"
     oriental = "oriental"
+    muisca = "muisca"
 
 
 class Rank(str, enum.Enum):
