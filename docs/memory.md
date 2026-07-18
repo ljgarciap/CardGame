@@ -546,3 +546,19 @@ formal no aplica (rol no activado todavía en CardGame).
     Flutter en CI de más arriba: el toolchain local (Python 3.14,
     Flutter 3.32.8) es más nuevo que el target real de producción/CI —
     tenerlo en cuenta antes de asumir que "pasa en local" alcanza.
+  - **Segundo bug atrapado por la CI**: los 3 tests nuevos de
+    change-password (`test_login_and_reset.py`) registran un usuario
+    (`_login_and_get_token` → `_register_and_verify` → `POST
+    /register`), que dispara un envío real de email — sin pedir el
+    fixture `sent_emails` (que mockea `send_email` con
+    `monkeypatch`, patrón ya usado por el resto del archivo) el request
+    intenta conectarse a un SMTP real. En local pasaba de pura
+    casualidad: Mailhog está corriendo en el stack de dev, así que el
+    envío real funcionaba silenciosamente. La CI no levanta un servicio
+    de Mailhog (no hace falta para nada más), así que ahí sí explotó
+    (`aiosmtplib.errors.SMTPConnectError`). Arreglado agregando
+    `sent_emails` a la firma de los 3 tests. **Lección para la próxima**:
+    antes de pushear, correr la suite local con `docker stop
+    cardgame-mailhog-1` para replicar de verdad la ausencia de Mailhog de
+    la CI, no confiar en que "pasa en local" cubre ese caso — se hizo
+    recién después de este segundo fallo, no antes.

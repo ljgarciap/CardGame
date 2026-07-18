@@ -220,7 +220,7 @@ def test_change_password_requires_auth(client):
     assert response.status_code == 401
 
 
-def test_change_password_rejects_wrong_current_password(client, db_session):
+def test_change_password_rejects_wrong_current_password(client, db_session, sent_emails):
     token = _login_and_get_token(client, db_session)
 
     response = client.post(
@@ -231,7 +231,9 @@ def test_change_password_rejects_wrong_current_password(client, db_session):
     assert response.status_code == 400
 
 
-def test_change_password_success_allows_login_with_new_password(client, db_session):
+def test_change_password_success_allows_login_with_new_password(
+    client, db_session, sent_emails
+):
     token = _login_and_get_token(client, db_session)
 
     response = client.post(
@@ -254,7 +256,7 @@ def test_change_password_success_allows_login_with_new_password(client, db_sessi
     assert new_password_login.status_code == 200
 
 
-def test_change_password_rejects_weak_new_password(client, db_session):
+def test_change_password_rejects_weak_new_password(client, db_session, sent_emails):
     token = _login_and_get_token(client, db_session)
 
     response = client.post(
