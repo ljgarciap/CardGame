@@ -533,3 +533,16 @@ formal no aplica (rol no activado todavía en CardGame).
     ver en `target_metadata` y puede proponer un `DROP TABLE
     deck_config`. Se agregó el import de `coin_grant` sí, para que este
     modelo no caiga en el mismo agujero.
+  - **Bug real atrapado por la CI, no por mí en local**: `coins.py` usó
+    sintaxis `str | None` (PEP 604) en la firma de `_grant_out` — válida
+    desde Python 3.10, pero `backend/Dockerfile`/la CI corren 3.9. El
+    `.venv` local es 3.14 (ver nota de deuda de versión más abajo de
+    todos modos), así que ahí no rompía; recién se vio en el primer push
+    real a GitHub Actions (`TypeError: unsupported operand type(s) for
+    |`). Corregido a `Optional[str]` (`typing`), consistente con el
+    resto del código (`Optional[...]`, no `X | None`, en todo el
+    proyecto — mismo patrón que ya evitó este problema en
+    `app/schemas/coin_grant.py`). Mismo tipo de gotcha que el pin de
+    Flutter en CI de más arriba: el toolchain local (Python 3.14,
+    Flutter 3.32.8) es más nuevo que el target real de producción/CI —
+    tenerlo en cuenta antes de asumir que "pasa en local" alcanza.

@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -21,7 +23,9 @@ router = APIRouter(
 )
 
 
-def _grant_out(grant: CoinGrant, granted_by_username: str, target_username: str | None) -> CoinGrantOut:
+def _grant_out(
+    grant: CoinGrant, granted_by_username: str, target_username: Optional[str]
+) -> CoinGrantOut:
     return CoinGrantOut(
         id=grant.id,
         granted_by_username=granted_by_username,
