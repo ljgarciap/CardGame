@@ -8,6 +8,7 @@ class FakeAuthRepository implements AuthRepository {
   UserAccountEntity? profile;
   ApiException? loginError;
   ApiException? updateError;
+  ApiException? verifyEmailError;
 
   FakeAuthRepository({this.storedToken, this.profile});
 
@@ -18,6 +19,11 @@ class FakeAuthRepository implements AuthRepository {
     required String username,
     required String avatarId,
   }) async {}
+
+  @override
+  Future<void> verifyEmail({required String token}) async {
+    if (verifyEmailError != null) throw verifyEmailError!;
+  }
 
   @override
   Future<void> resendVerification({required String email}) async {}

@@ -26,4 +26,19 @@ void main() {
     final uri = Uri.parse('cardgame://reset-password?token=');
     expect(extractResetPasswordToken(uri), isNull);
   });
+
+  test('extrae el token de un link de verify-email válido', () {
+    final uri = Uri.parse('cardgame://verify-email?token=xyz789');
+    expect(extractVerifyEmailToken(uri), 'xyz789');
+  });
+
+  test('extractVerifyEmailToken devuelve null para otro host', () {
+    final uri = Uri.parse('cardgame://reset-password?token=xyz789');
+    expect(extractVerifyEmailToken(uri), isNull);
+  });
+
+  test('extractVerifyEmailToken devuelve null con token vacío', () {
+    final uri = Uri.parse('cardgame://verify-email?token=');
+    expect(extractVerifyEmailToken(uri), isNull);
+  });
 }

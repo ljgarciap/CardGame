@@ -24,6 +24,14 @@ class AuthRemoteDatasource extends BaseRemoteDatasource {
     return decodeOrThrow(response);
   }
 
+  Future<Map<String, dynamic>> verifyEmail({required String token}) async {
+    final response = await client.get(
+      uri('/api/auth/verify-email').replace(queryParameters: {'token': token}),
+      headers: jsonHeaders,
+    );
+    return decodeOrThrow(response);
+  }
+
   Future<Map<String, dynamic>> resendVerification({required String email}) async {
     final response = await client.post(
       uri('/api/auth/resend-verification'),

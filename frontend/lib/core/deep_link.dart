@@ -10,3 +10,11 @@ String? extractResetPasswordToken(Uri uri) {
   final token = uri.queryParameters['token'];
   return (token == null || token.isEmpty) ? null : token;
 }
+
+/// Deep link de verificación de email: `cardgame://verify-email?token=...`.
+/// Mismo scheme y mismo motivo que [extractResetPasswordToken].
+String? extractVerifyEmailToken(Uri uri) {
+  if (uri.scheme != 'cardgame' || uri.host != 'verify-email') return null;
+  final token = uri.queryParameters['token'];
+  return (token == null || token.isEmpty) ? null : token;
+}

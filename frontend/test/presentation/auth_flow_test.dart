@@ -95,4 +95,47 @@ void main() {
     expect(find.byType(VerifyEmailPendingPage), findsOneWidget);
     expect(find.textContaining('nuevo@a.com'), findsOneWidget);
   });
+
+  Future<void> registerAndReachVerifyPage(WidgetTester tester) async {
+    await tester.tap(find.text('¿No tenés cuenta? Registrate'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, 'Email'), 'nuevo@a.com');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Username'), 'nuevo_user');
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Contraseña'), 'supersecret123');
+    await tester.tap(find.text('REGISTRARME'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('Verificar con token manual muestra pantalla de éxito',
+      (tester) async {
+    await tester.pumpWidget(_appWith(FakeAuthRepository()));
+    await tester.pumpAndSettle();
+    await registerAndReachVerifyPage(tester);
+
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Token (del correo)'), 'abc123');
+    await tester.tap(find.text('VERIFICAR'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tu cuenta quedó verificada. Ya podés iniciar sesión.'),
+        findsOneWidget);
+  });
+
+  testWidgets('Verificar con token inválido muestra el mensaje del servidor',
+      (tester) async {
+    final repository = FakeAuthRepository()
+      ..verifyEmailError =
+          ApiException(statusCode: 400, message: 'Token inválido o expirado');
+    await tester.pumpWidget(_appWith(repository));
+    await tester.pumpAndSettle();
+    await registerAndReachVerifyPage(tester);
+
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Token (del correo)'), 'bad-token');
+    await tester.tap(find.text('VERIFICAR'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Token inválido o expirado'), findsOneWidget);
+  });
 }

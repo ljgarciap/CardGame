@@ -9,6 +9,7 @@ import 'core/deep_link.dart';
 import 'presentation/pages/login_page.dart';
 import 'presentation/pages/main_menu_page.dart';
 import 'presentation/pages/reset_password_page.dart';
+import 'presentation/pages/verify_email_pending_page.dart';
 import 'presentation/providers/auth_provider.dart';
 
 void main() {
@@ -43,11 +44,20 @@ class _CardGameAppState extends ConsumerState<CardGameApp> {
   }
 
   void _handleUri(Uri uri) {
-    final token = extractResetPasswordToken(uri);
-    if (token == null) return;
-    _navigatorKey.currentState?.push(
-      MaterialPageRoute(builder: (_) => ResetPasswordPage(token: token)),
-    );
+    final resetToken = extractResetPasswordToken(uri);
+    if (resetToken != null) {
+      _navigatorKey.currentState?.push(
+        MaterialPageRoute(builder: (_) => ResetPasswordPage(token: resetToken)),
+      );
+      return;
+    }
+
+    final verifyToken = extractVerifyEmailToken(uri);
+    if (verifyToken != null) {
+      _navigatorKey.currentState?.push(
+        MaterialPageRoute(builder: (_) => VerifyEmailPendingPage(token: verifyToken)),
+      );
+    }
   }
 
   @override

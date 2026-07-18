@@ -452,3 +452,37 @@ formal no aplica (rol no activado todavía en CardGame).
   Troubleshooting documentado en `.claude/skills/run/SKILL.md` — correr
   `pytest` y probar la app a mano en la misma sesión no conviven sobre
   la misma base sin resembrar entre medio.
+- **Bug real: el link de verificación de email no llevaba a ningún
+  lado**. Causa raíz: `_send_verification_email` (`backend/app/api/auth.py`)
+  armaba el link como `https://cardgame.local/verify-email?token=...` —
+  el mismo problema que ya se había encontrado y resuelto para
+  reset-password (`docs/designs/auth-system.md`, "Deep link de
+  reset-password", 2026-07-15e: `cardgame.local` no es un dominio real,
+  no hay forma de hostear `apple-app-site-association`/`assetlinks.json`
+  para un Universal/App Link HTTPS), pero ese fix nunca se aplicó a
+  verify-email. Se corrigió aplicando el mismo patrón ya aprobado:
+  - Backend: link ahora `cardgame://verify-email?token=...`.
+  - Frontend: `core/deep_link.dart` suma `extractVerifyEmailToken`
+    (mismo patrón que `extractResetPasswordToken`, con tests). `main.dart`
+    lo escucha y navega a `VerifyEmailPendingPage(token: ...)`.
+  - **`VerifyEmailPendingPage` ahora tiene un campo de token editable +
+    botón "Verificar"** (antes solo tenía "reenviar" y "ya verifiqué, ir
+    a login", sin forma de completar la verificación desde la UI). Es la
+    única forma real de probar este flujo en web
+    (`flutter run -d chrome`): un custom URL scheme no dispara nada al
+    abrir el link desde un cliente de correo dentro de un tab de Chrome.
+    Nueva capa de datos: `AuthRemoteDatasource.verifyEmail`,
+    `AuthRepository.verifyEmail` (+ impl + fake de tests).
+  - Verificado end-to-end contra Mailhog real: registro → token
+    extraído del email → verify-email 200 → login 200 con JWT.
+  - **Nota al pasar, no bloqueante**: el body del email llega con
+    `Content-Transfer-Encoding: quoted-printable` (vía `aiosmtplib`,
+    por el acento en "Hacé") — la API REST de Mailhog (`/api/v2/...`,
+    `/api/v1/...`) devuelve el body *sin decodificar* (con `=3D` y
+    saltos de línea `=` de soft-wrap), pero la UI web de Mailhog
+    decodifica MIME del lado del cliente para mostrarlo, así que copiar
+    el token desde ahí a mano da el valor limpio — confirmado
+    decodificando el quoted-printable a mano, no se pudo confirmar
+    visualmente en la UI real (extensión de Chrome no conectada en esta
+    sesión). Si algún día se ve un token roto al copiarlo de Mailhog,
+    empezar por acá.

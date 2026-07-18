@@ -41,7 +41,13 @@ def _generate_token() -> str:
 
 
 async def _send_verification_email(email: str, token: str) -> None:
-    verify_url = f"https://cardgame.local/verify-email?token={token}"
+    # Custom URL scheme, no HTTPS Universal/App Link — mismo motivo que
+    # _send_password_reset_email: cardgame.local no es un dominio real que
+    # podamos hostear, así que no hay forma de publicar
+    # apple-app-site-association/assetlinks.json para verificar un link
+    # HTTPS. Ver docs/designs/auth-system.md, "Deep link de
+    # reset-password" — mismo patrón aplicado acá.
+    verify_url = f"cardgame://verify-email?token={token}"
     await send_email(
         to=email,
         subject="Verifica tu cuenta de CardGame",

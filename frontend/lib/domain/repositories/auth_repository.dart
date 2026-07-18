@@ -8,6 +8,8 @@ abstract class AuthRepository {
     required String avatarId,
   });
 
+  Future<void> verifyEmail({required String token});
+
   Future<void> resendVerification({required String email});
 
   /// Inicia sesión y persiste el token. Devuelve el perfil del jugador.
