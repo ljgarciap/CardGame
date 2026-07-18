@@ -1,11 +1,11 @@
 {
-    "name": "card_game",
-    "short_name": "card_game",
+    "name": "MYTHOS",
+    "short_name": "MYTHOS",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "MYTHOS — TCG donde todos los mitos existen a la vez.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

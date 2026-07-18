@@ -70,7 +70,7 @@ class _CardGameAppState extends ConsumerState<CardGameApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: _navigatorKey,
-      title: 'Premium Card Game',
+      title: 'MYTHOS',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,

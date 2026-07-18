@@ -54,7 +54,7 @@ class MainMenuPage extends StatelessWidget {
                   ).animate().scale(delay: 200.ms).fadeIn(),
                   const SizedBox(height: 20),
                   Text(
-                    'ANTIGRAVITY',
+                    'MYTHOS',
                     style: TextStyle(
                       fontSize: 48,
                       fontWeight: FontWeight.bold,
@@ -70,7 +70,7 @@ class MainMenuPage extends StatelessWidget {
                     ),
                   ).animate().slideY(begin: 0.5).fadeIn(),
                   Text(
-                    'CARD STUDIO',
+                    'EL TEJIDO',
                     style: TextStyle(
                       fontSize: 16,
                       letterSpacing: 4,
