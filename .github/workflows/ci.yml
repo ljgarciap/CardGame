@@ -1,0 +1,90 @@
+# Solo CI (tests en los runners de GitHub) — no despliega a ningún
+# servidor, por eso no espera a tener VPS. Verificado localmente en las
+# mismas condiciones que usa este workflow (Postgres 15 + Redis como
+# servicios, Python 3.9, Flutter stable): 160 tests de backend y 34 de
+# frontend pasando. El CD (deploy real al VPS) queda pendiente aparte.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: card_game
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U user -d card_game"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Misma versión de imagen base que backend/Dockerfile (python:3.9-slim)
+      # para que CI valide contra lo mismo que corre en el VPS.
+      DATABASE_URL: postgresql://user:password@localhost:5432/card_game
+      JWT_SECRET_KEY: ci-secret-not-for-prod
+      REDIS_URL: redis://localhost:6379/0
+      SMTP_HOST: localhost
+      SMTP_PORT: 1025
+      SMTP_FROM: noreply@cardgame.local
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Aplicar migraciones
+        run: alembic upgrade head
+
+      - name: Correr tests
+        run: python -m pytest
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Instalar dependencias
+        run: flutter pub get
+
+      - name: Analizar
+        # --no-fatal-infos: hoy hay ~30 avisos info preexistentes
+        # (withOpacity deprecated) que no son regresiones — no deben
+        # tumbar la CI. Sí falla ante warnings/errors nuevos.
+        run: flutter analyze --no-fatal-infos
+
+      - name: Correr tests
+        run: flutter test

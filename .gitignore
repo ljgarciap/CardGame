@@ -40,3 +40,4 @@ backend/htmlcov/
 # --- Docker ---
 .docker-data/
 db_data/
+docker-compose.override.yml

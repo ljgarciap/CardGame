@@ -391,3 +391,25 @@ queda cerrado: implementación (793abf4/e0ec81e) → 10 hallazgos originales
 resueltos (1bdb5af) → revisión senior con 2 hallazgos más, corregidos
 (80e5e44) → spec retroactiva (c4dce89) → aprobación final de Luis. QA
 formal no aplica (rol no activado todavía en CardGame).
+
+## 2026-07-17
+- **Ambiente local de desarrollo**: `scripts/dev-up.sh` levanta el stack
+  completo (`docker compose up -d db redis mailhog`, espera a Postgres,
+  regenera `backend/.env` leyendo el puerto de host real que publicó
+  Compose, migraciones, seeds idempotentes, `uvicorn --reload`). Necesario
+  porque los puertos default (5432/6379) ya están tomados en esta máquina
+  por otros proyectos del workspace (`infra-postgres-1`, `zia_redis`) —
+  `docker-compose.override.yml` (no versionado, en `.gitignore`) remapea
+  a 5433/6380 con `ports: !override` (el merge default de Compose concatena
+  arrays en vez de reemplazar, así que sin `!override` el conflicto de
+  puerto seguía apareciendo). Documentado como skill de proyecto en
+  `.claude/skills/run/SKILL.md`.
+- **CI activado** (`.github/workflows/ci.yml`): Postgres+Redis como
+  servicios, Python 3.9 igual que `backend/Dockerfile`, `python -m pytest`
+  [no `pytest` a secas, falla el import de `app`], Flutter stable con
+  `analyze --no-fatal-infos` [hay ~30 avisos info preexistentes de
+  `withOpacity` deprecated, deuda ya existente, no bloquean]. Verificado
+  localmente en las mismas condiciones antes de commitear: 160 tests de
+  backend y 34 de frontend pasando. Es solo testing en runners de GitHub,
+  no depliega a ningún servidor — el CD real (deploy al VPS) queda
+  pendiente aparte, para cuando exista esa infraestructura.
