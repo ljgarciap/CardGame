@@ -18,6 +18,7 @@ enum CardFaction {
   egyptian,
   aztec,
   oriental,
+  muisca,
 }
 
 /// El backend usa rank en snake_case (`minor_god`, `major_god`) — no

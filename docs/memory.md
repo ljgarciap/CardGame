@@ -676,3 +676,43 @@ formal no aplica (rol no activado todavía en CardGame).
     volver llegando por `push`) + un test nuevo en
     `marketplace_page_test.dart` (saldo de coins visible). 53 tests
     frontend pasan (49 + 4 nuevos).
+- **Bug real y de impacto alto: "no se pudo abrir el sobre" pasaba ~60%
+  de las veces desde que se agregó Muisca**. Causa: `CardFaction` — el
+  enum del *frontend* en `lib/domain/entities/card.dart` — nunca se
+  actualizó cuando se agregó `muisca` al enum `Faction` del *backend*.
+  `TCGCardEntity.fromJson` usa `CardFaction.values.byName(json['faction'])`,
+  que tira `ArgumentError` si el string no matchea ningún valor del enum
+  Dart. Como Muisca es 1 de 6 facciones y cada sobre trae 5 cartas, la
+  probabilidad de que un sobre incluya al menos una carta Muisca es
+  ~60% (`1 - (5/6)^5`) — de ahí que el usuario lo viera "todo el
+  tiempo". El error real quedaba enmascarado por el `catch (_)` genérico
+  de `pack_opening_page.dart` (mensaje "No se pudo abrir el sobre.
+  Intentá de nuevo." para *cualquier* excepción no-`ApiException`) — el
+  comentario en ese catch ya anticipaba textualmente "valor de enum
+  desconocido" como causa posible, pero solo con eso no alcanzaba para
+  encontrarlo sin mirar el código.
+  - Arreglado: `muisca` agregado a `CardFaction` (cubre las 3 factories
+    `.fromJson` que lo usan: `TCGCardEntity`, `OwnedCardEntity`,
+    `CardInPlayEntity` — las tres importan el enum desde `card.dart`, un
+    solo fix las cubre). `catch (_)` → `catch (e)` +
+    `debugPrint('PackOpeningPage._openPack error: $e')` en
+    `pack_opening_page.dart` — el mensaje al usuario queda igual de
+    genérico a propósito, pero la próxima vez que algo similar pase
+    (nueva facción, nuevo rango, nueva rareza agregada al backend sin
+    replicar en el frontend) va a quedar en la consola, no invisible del
+    todo.
+  - Test de regresión nuevo: `test/domain/entities/card_test.dart` —
+    parsea las 6 facciones reales (incluida `muisca`) sin tirar, y
+    confirma que una facción realmente desconocida sí tira (para no
+    perder la protección real del catch-all). Verificado además contra
+    el backend real: 6 aperturas de sobre nivel 5, varias cartas Muisca
+    reales capturadas y confirmado que el JSON (`"faction": "muisca"`)
+    coincide exactamente con lo que el fix ahora sabe parsear.
+  - **Lección**: agregar un valor de enum en el backend (`Faction`,
+    `Rank`, `Rarity`) no es un cambio backend-only — el frontend tiene su
+    propia copia del enum (`CardFaction`, `CardRank`, `CardRarity` en
+    `card.dart`) sin ningún mecanismo compartido/generado que los
+    mantenga sincronizados. Cualquier expansión futura del roadmap (ver
+    `docs/specs/game-lore-tejido.md`) que agregue una facción nueva tiene
+    que tocar los dos lados a la vez, o va a repetir exactamente este
+    bug.

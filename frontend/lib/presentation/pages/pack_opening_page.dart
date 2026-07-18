@@ -49,10 +49,15 @@ class _PackOpeningPageState extends ConsumerState<PackOpeningPage> {
         _isLoading = false;
         _errorMessage = e.message;
       });
-    } catch (_) {
+    } catch (e) {
       // Red caída, respuesta no-JSON, valor de enum desconocido, etc. — sin
       // esto el botón quedaba deshabilitado para siempre (_isLoading nunca
-      // se resetea) y el usuario no tenía forma de reintentar.
+      // se resetea) y el usuario no tenía forma de reintentar. El mensaje
+      // al usuario queda genérico a propósito, pero se loguea el error real
+      // -- un ArgumentError de CardFaction.values.byName() por un valor de
+      // enum nuevo que el backend ya manda y el frontend todavía no conoce
+      // (pasó de verdad con "muisca") no debería quedar invisible del todo.
+      debugPrint('PackOpeningPage._openPack error: $e');
       setState(() {
         _isLoading = false;
         _errorMessage = 'No se pudo abrir el sobre. Intentá de nuevo.';
