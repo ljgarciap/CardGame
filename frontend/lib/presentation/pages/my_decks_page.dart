@@ -100,6 +100,17 @@ class _MyDecksPageState extends ConsumerState<MyDecksPage> {
     );
   }
 
+  void _practiceVsBot(SavedDeckEntity deck) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => MatchmakingPage(
+          deck: deck.cards.map((c) => c.playerCardId).toList(),
+          isBotMatch: true,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -155,6 +166,7 @@ class _MyDecksPageState extends ConsumerState<MyDecksPage> {
                         itemBuilder: (context, index) => _DeckTile(
                           deck: decks[index],
                           onPlay: () => _play(decks[index]),
+                          onPracticeVsBot: () => _practiceVsBot(decks[index]),
                           onEdit: () => _edit(decks[index]),
                           onDelete: () => _delete(decks[index]),
                         ),
@@ -190,12 +202,14 @@ class _MyDecksPageState extends ConsumerState<MyDecksPage> {
 class _DeckTile extends StatelessWidget {
   final SavedDeckEntity deck;
   final VoidCallback onPlay;
+  final VoidCallback onPracticeVsBot;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _DeckTile({
     required this.deck,
     required this.onPlay,
+    required this.onPracticeVsBot,
     required this.onEdit,
     required this.onDelete,
   });
@@ -237,6 +251,15 @@ class _DeckTile extends StatelessWidget {
               IconButton(onPressed: onEdit, icon: const Icon(Icons.edit, color: Colors.white54)),
               IconButton(onPressed: onDelete, icon: const Icon(Icons.delete_outline, color: Colors.redAccent)),
             ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: onPracticeVsBot,
+              icon: const Icon(Icons.smart_toy_outlined, size: 18),
+              label: const Text('PRACTICAR CONTRA BOT'),
+            ),
           ),
         ],
       ),

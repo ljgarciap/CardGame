@@ -20,7 +20,7 @@ from starlette.concurrency import run_in_threadpool
 from app.api import deps
 from app.db.session import SessionLocal
 from app.models.user import User
-from app.services import match_pubsub, match_store, matchmaking, user_notify
+from app.services import bot, match_pubsub, match_store, matchmaking, user_notify
 from app.services.card_ownership import load_owned_cards
 from app.services.match_engine import (
     DECK_SIZE,
@@ -138,6 +138,46 @@ async def _handle_queue(user: User, raw_deck: list, websocket: WebSocket) -> Non
     await _try_start_match()
 
 
+def _build_bot_deck_sync() -> list[CardInPlay]:
+    with SessionLocal() as db:
+        return bot.build_bot_deck(db)
+
+
+async def _handle_start_bot_match(user: User, raw_deck: list, websocket: WebSocket) -> None:
+    """Arranca una partida al toque contra el bot de práctica ("Eco"), sin
+    pasar por la cola de matchmaking real. Reusa exactamente el mismo
+    protocolo (`match_found` vía user_notify) que un emparejamiento
+    real, así que el resto del cliente (MatchPage, _forward_events) no
+    necesita saber que el rival es un bot."""
+    if user.id in _local_match_ids:
+        raise MatchRuleViolation("ya estás en una partida")
+
+    # Defensivo: si el jugador estaba en la cola de matchmaking real y
+    # decide practicar contra el bot en su lugar, no lo dejamos ahí
+    # esperando un emparejamiento que ya no le importa.
+    await matchmaking.leave_queue(user.id)
+
+    human_cards = await _resolve_deck(user, raw_deck)
+    bot_cards = await run_in_threadpool(_build_bot_deck_sync)
+
+    match = start_match(
+        match_id=uuid.uuid4(),
+        player_a=(user.id, user.username, human_cards),
+        player_b=(bot.BOT_USER_ID, bot.BOT_USERNAME, bot_cards),
+    )
+    bot.run_bot_turn(match)  # por si el orden de turno al azar le tocó arrancar a él
+    await match_store.save_match(match)
+
+    await user_notify.notify_user(
+        user.id,
+        {
+            "type": "match_found",
+            "match_id": str(match.id),
+            "opponent_username": bot.BOT_USERNAME,
+        },
+    )
+
+
 async def _handle_match_action(user_id: UUID, action: str, raw: dict) -> None:
     match_id = _local_match_ids.get(user_id)
     if match_id is None:
@@ -156,6 +196,12 @@ async def _handle_match_action(user_id: UUID, action: str, raw: dict) -> None:
             attack(match, user_id, uuid.UUID(str(raw["attacker_id"])), target_value)
         elif action == "end_turn":
             end_turn(match, user_id)
+            # Si el rival es el bot de práctica, le toca jugar su turno
+            # entero acá mismo, sincrónico -- reusa las mismas funciones de
+            # match_engine que un humano, así que el save/publish de más
+            # abajo ya cubre difundir el resultado, no hace falta repetirlo.
+            if not match.is_over and bot.is_bot_turn(match):
+                bot.run_bot_turn(match)
         elif action == "forfeit":
             forfeit(match, user_id)
 
@@ -265,6 +311,8 @@ async def match_websocket(websocket: WebSocket):
             try:
                 if action == "queue":
                     await _handle_queue(user, raw.get("deck", []), websocket)
+                elif action == "start_bot_match":
+                    await _handle_start_bot_match(user, raw.get("deck", []), websocket)
                 elif action == "leave_queue":
                     await matchmaking.leave_queue(user.id)
                 elif action in ("play_card", "attack", "end_turn", "forfeit"):

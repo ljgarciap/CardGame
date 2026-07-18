@@ -81,31 +81,25 @@ apuntando a 8001 igual, no hace falta tocar nada para que funcione.
 
 ```bash
 curl -s -w "\nHTTP %{http_code}\n" http://localhost:8001/docs
-# 200 = ok. Pero no te quedes solo con /docs (ver troubleshooting abajo)
-# — probá un POST real (ej. /api/auth/register) para confirmar que no
-# estás pegándole al backend equivocado de otro proyecto.
+# 200 = ok. Pero no te quedes solo con /docs — probá un POST real (ej.
+# /api/auth/register) para confirmar que no estás pegándole al backend
+# equivocado de otro proyecto (ver nota de puertos arriba).
 ```
 
-## Troubleshooting
+## Correr `pytest` no toca la base/Redis de desarrollo
 
-**"Internal Server Error" / `relation "users" does not exist` en el
-log del backend, pero `alembic upgrade head` no aplica nada nuevo**:
-corriste la suite de `pytest` contra esta misma base después del último
-`dev-up.sh`. El fixture `_setup_db` de `tests/conftest.py` hace
-`Base.metadata.drop_all` al terminar cada test — borra las tablas de la
-app pero no `alembic_version`, así que Alembic cree que ya está al día
-y no las recrea. Arreglo:
-
-```bash
-docker exec cardgame-db-1 psql -U user -d card_game -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
-cd backend && source .venv/bin/activate
-alembic upgrade head
-python -m app.db.seed && python -m app.db.seed_gacha_config && python -m app.db.seed_deck_config
-```
-
-Si vas a correr `pytest` y después vas a seguir probando la app a mano
-en la misma sesión, planeá re-seedear después — son cosas que no
-conviven sobre la misma base.
+`backend/tests/conftest.py` corre contra **`card_game_test`** (Postgres,
+misma instancia, creada sola la primera vez que hace falta) y contra el
+**índice 1 de Redis** (`db 0` es el que usa la app en dev) — nunca contra
+lo que ves en `dev-up.sh`. Podés correr `pytest` en cualquier momento,
+incluso con la app abierta y en uso, sin perder coins, mazos, ni estado de
+partidas. Esto se rompió una vez (ver `docs/memory.md` 2026-07-19) porque
+`app/api/match_ws.py` usa `SessionLocal` directo en vez de
+`Depends(get_db)` — si alguna vez se agrega otro módulo que haga lo mismo
+(importar `SessionLocal`/`engine` de `app/db/session.py` en vez de inyectar
+la sesión), va a quedar atado a la base real igual, sin que el mecanismo de
+aislamiento de `conftest.py` lo cubra — repasar ese archivo si vuelve a
+pasar.
 
 ## Limpieza
 

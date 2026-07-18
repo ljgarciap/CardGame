@@ -24,6 +24,12 @@ void main() {
     expect(repository.calls, contains('queue([a, b])'));
   });
 
+  test('startBotMatch conecta y manda la acción start_bot_match con el mazo', () async {
+    await container.read(matchNotifierProvider.notifier).startBotMatch(['a', 'b']);
+
+    expect(repository.calls, contains('startBotMatch([a, b])'));
+  });
+
   test('mensaje queued pasa a fase queued', () async {
     await container.read(matchNotifierProvider.notifier).startQueue(['a']);
     repository.emit({'type': 'queued'});

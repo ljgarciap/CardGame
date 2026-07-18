@@ -716,3 +716,98 @@ formal no aplica (rol no activado todavía en CardGame).
     `docs/specs/game-lore-tejido.md`) que agregue una facción nueva tiene
     que tocar los dos lados a la vez, o va a repetir exactamente este
     bug.
+
+## 2026-07-19
+- **Arreglado de raíz: los tests ya no comparten base/Redis con dev**.
+  Luis reportó, con razón, que las coins se le reseteaban "cada vez que
+  hacía cambios" — no era percepción, era literal: cada corrida de
+  `pytest` contra `settings.database_url` (la misma base que usa
+  `dev-up.sh`) hacía `drop_all` de las tablas vía el fixture `_setup_db`
+  de `tests/conftest.py`, y `_setup_redis` hacía `flushdb()` sobre el
+  mismo Redis de desarrollo. Esto ya estaba **documentado como
+  "troubleshooting" varias entradas atrás en esta misma sesión** en vez
+  de arreglado — el momento de pasar de "conocido y wonkeado a mano" a
+  "arreglado de raíz" fue cuando Luis lo marcó como un problema real de
+  persistencia, no antes.
+  - Fix: `conftest.py` ahora corre contra `card_game_test` (Postgres,
+    misma instancia, creada sola la primera vez que hace falta vía una
+    conexión de mantenimiento a la base `postgres`) y contra el índice 1
+    de Redis (dev usa el 0) — mutando `settings.database_url`/
+    `settings.redis_url` **antes** de importar cualquier módulo de la
+    app, no después.
+  - **Dos bugs reales encontrados armando el fix mismo** (documentados acá
+    porque son sutiles y podrían repetirse):
+    1. `str(url)` de SQLAlchemy enmascara la contraseña con `"***"` por
+       default (repr seguro) — armar la URL de test con `str(url.set(...))`
+       producía un connection string con password literal `***`, fallaba
+       auth. Hace falta `url.render_as_string(hide_password=False)`.
+    2. `app/api/match_ws.py` usa `SessionLocal` importado directo de
+       `app/db/session.py` (no `Depends(get_db)`, WebSockets no se prestan
+       igual de bien a la inyección de dependencias de FastAPI) —
+       `app/db/session.py` arma su `engine`/`SessionLocal` a nivel de
+       módulo con `settings.database_url` en el momento del *import*. Mutar
+       `settings.database_url` en `conftest.py` *después* de que
+       `from app.main import app` ya disparó ese import (como estaba en el
+       primer intento del fix) dejaba a `match_ws.py` atado a la base de
+       desarrollo para siempre — los tests de HTTP (`client` fixture, que sí
+       usa `Depends(get_db)` con override) no lo notaban, pero los 5 tests
+       de WebSocket sí, con un `WebSocketDisconnect` código 4401 ("token
+       inválido") porque el usuario de test no existía del lado de la base
+       real. Se resolvió reordenando `conftest.py`: mutar
+       `settings.database_url`/`settings.redis_url` inmediatamente después
+       de importar `settings`, antes de cualquier otro import de `app.*`.
+  - Verificado de la única forma que realmente importa acá: se otorgaron
+    12345 coins a mano, se corrió la suite completa (177 tests, todos
+    pasan) contra `card_game_test`, y las coins en `card_game` (la base
+    real) siguieron en 12345 sin tocar. Lo mismo con una clave marcadora
+    en Redis índice 0 — sobrevivió a una corrida completa de
+    `test_match_ws.py`.
+  - `.claude/skills/run/SKILL.md` actualizado: la sección de
+    troubleshooting sobre "`pytest` vacía la base, hay que resembrar" ya
+    no aplica y se reemplazó por la explicación de por qué ahora no hace
+    falta.
+- **Bot de práctica "Eco" — spec aprobada e implementada**
+  (`docs/specs/game-bot-practica.md`). Contexto: el motor de partidas en
+  tiempo real ya estaba completo (`match_engine.py`, `matchmaking.py`,
+  `match_ws.py`, verificado por tests desde antes de esta sesión), pero
+  Luis reportó que no había forma de probarlo solo — el matchmaking exige
+  2 jugadores reales en la cola, sin timeout ni bot de respaldo.
+  - **Diseño (Game Expert)**: botón explícito "PRACTICAR CONTRA BOT" en
+    `MyDecksPage` (sin cola, arranca al toque, no timeout desde
+    matchmaking real — decisión consciente, más simple para esta
+    iteración). Bot llamado **"Eco"** (atado al lore de Los Nacidos del
+    Eco). Mazo de 10 arquetipos al azar del catálogo real por partida (no
+    un mazo fijo — evita el mismo tipo de mantenimiento manual que ya
+    falló con el enum de Muisca). Heurística sin IA real: juega la carta
+    de mayor ataque si hay lugar, prioriza trades favorables al atacar,
+    si no hay ninguno ataca a la cara. Sin dificultad ajustable en esta
+    iteración.
+  - **Implementación (Architect + Backend Dev)**: `app/services/bot.py`
+    nuevo (`build_bot_deck`, `is_bot_turn`, `run_bot_turn` — todas
+    funciones puras o casi, reusan `play_card`/`attack`/`end_turn` de
+    `match_engine.py` sin atajos). `BOT_USER_ID` es un UUID fijo, no una
+    fila real de `users` (`Match`/`MatchPlayerState` viven en Redis, sin
+    FK). Wireado en `match_ws.py`: acción nueva `start_bot_match` (mismo
+    protocolo `match_found` que un emparejamiento real, así que
+    `MatchPage`/`_forward_events` no necesitan saber que el rival es un
+    bot) + el turno del bot corre automático dentro del mismo bloque de
+    lock cuando le toca después de un `end_turn` humano (o al arrancar,
+    si el orden de turno al azar le tocó a él primero).
+  - **Nota de balance real, no un bug**: `STARTING_LIFE` (20) es menor al
+    ataque de la carta más floja del catálogo (Hero, 30) — un solo golpe
+    sin bloquear ya dejaba la vida en 0. Esto ya era así en
+    `match_engine.py` antes del bot; se descubrió armando los tests
+    (2 asserts mal armados asumían que el intercambio de turnos siempre
+    seguía vivo) y quedó documentado en la spec, no "arreglado" — es una
+    regla de juego fija ya definida por el Game Expert, no algo para
+    tocar de paso.
+  - Frontend: `MatchRepository.startBotMatch`, `MatchNotifier.startBotMatch`
+    (refactor: `startQueue` y `startBotMatch` comparten
+    `_connectAndSend`, antes duplicado), `MatchmakingPage` con flag
+    `isBotMatch` (mismo flujo, cambia el texto de espera), botón nuevo en
+    `MyDecksPage`.
+  - Verificado con tests (177 → 187 backend: 8 unitarios de la heurística
+    + 2 de integración vía WebSocket real; 61 frontend) y con una partida
+    real jugada contra el backend en vivo (no solo tests): `match_found`
+    con `opponent_username: "Eco"`, el bot jugó y atacó solo, partida
+    terminada por `life_zero` con el bot como ganador.

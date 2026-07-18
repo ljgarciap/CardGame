@@ -8,7 +8,10 @@ import 'match_page.dart';
 class MatchmakingPage extends ConsumerStatefulWidget {
   final List<String> deck;
 
-  const MatchmakingPage({super.key, required this.deck});
+  /// true: arranca al toque contra el bot de práctica, sin cola real.
+  final bool isBotMatch;
+
+  const MatchmakingPage({super.key, required this.deck, this.isBotMatch = false});
 
   @override
   ConsumerState<MatchmakingPage> createState() => _MatchmakingPageState();
@@ -23,7 +26,10 @@ class _MatchmakingPageState extends ConsumerState<MatchmakingPage> {
     // No se puede leer/escribir un provider directo desde initState — se
     // difiere un tick con microtask, mismo patrón que usaría un
     // WidgetsBinding.instance.addPostFrameCallback.
-    Future.microtask(() => ref.read(matchNotifierProvider.notifier).startQueue(widget.deck));
+    Future.microtask(() {
+      final notifier = ref.read(matchNotifierProvider.notifier);
+      widget.isBotMatch ? notifier.startBotMatch(widget.deck) : notifier.startQueue(widget.deck);
+    });
   }
 
   @override
@@ -75,9 +81,9 @@ class _MatchmakingPageState extends ConsumerState<MatchmakingPage> {
           .animate(onPlay: (c) => c.repeat(reverse: true))
           .scale(begin: const Offset(0.9, 0.9), end: const Offset(1.1, 1.1), duration: 1.seconds),
       const SizedBox(height: 30),
-      const Text(
-        'BUSCANDO PARTIDA...',
-        style: TextStyle(letterSpacing: 2, fontWeight: FontWeight.bold, color: Colors.white70),
+      Text(
+        widget.isBotMatch ? 'PREPARANDO PARTIDA...' : 'BUSCANDO PARTIDA...',
+        style: const TextStyle(letterSpacing: 2, fontWeight: FontWeight.bold, color: Colors.white70),
       ),
       const SizedBox(height: 40),
       TextButton(

@@ -26,6 +26,10 @@ class MatchRepositoryImpl implements MatchRepository {
   void queue(List<String> deck) => _client.send({'action': 'queue', 'deck': deck});
 
   @override
+  void startBotMatch(List<String> deck) =>
+      _client.send({'action': 'start_bot_match', 'deck': deck});
+
+  @override
   void leaveQueue() => _client.send({'action': 'leave_queue'});
 
   @override

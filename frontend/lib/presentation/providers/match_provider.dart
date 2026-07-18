@@ -81,7 +81,16 @@ class MatchNotifier extends Notifier<MatchUiState> {
 
   MatchRepository get _repository => ref.read(matchRepositoryProvider);
 
-  Future<void> startQueue(List<String> deck) async {
+  Future<void> startQueue(List<String> deck) => _connectAndSend(() => _repository.queue(deck));
+
+  /// Arranca al toque contra el bot de práctica, sin pasar por la cola de
+  /// matchmaking real — mismo protocolo de mensajes que un emparejamiento
+  /// real (`match_found`/`state_update`), así que el resto de este
+  /// notifier y de MatchPage no necesitan saber que el rival es un bot.
+  Future<void> startBotMatch(List<String> deck) =>
+      _connectAndSend(() => _repository.startBotMatch(deck));
+
+  Future<void> _connectAndSend(void Function() sendInitialAction) async {
     state = const MatchUiState(phase: MatchPhase.connecting);
     try {
       final stream = await _repository.connect();
@@ -103,7 +112,7 @@ class MatchNotifier extends Notifier<MatchUiState> {
           }
         },
       );
-      _repository.queue(deck);
+      sendInitialAction();
     } on ApiException catch (e) {
       state = MatchUiState(phase: MatchPhase.fatalError, errorMessage: e.message);
     } catch (_) {

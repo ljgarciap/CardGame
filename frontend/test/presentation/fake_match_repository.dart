@@ -22,6 +22,9 @@ class FakeMatchRepository implements MatchRepository {
   void queue(List<String> deck) => calls.add('queue($deck)');
 
   @override
+  void startBotMatch(List<String> deck) => calls.add('startBotMatch($deck)');
+
+  @override
   void leaveQueue() => calls.add('leaveQueue()');
 
   @override

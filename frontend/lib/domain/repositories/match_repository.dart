@@ -8,6 +8,11 @@ abstract class MatchRepository {
   Future<Stream<Map<String, dynamic>>> connect();
 
   void queue(List<String> deck);
+
+  /// Arranca al toque contra el bot de práctica, sin pasar por la cola de
+  /// matchmaking real.
+  void startBotMatch(List<String> deck);
+
   void leaveQueue();
   void playCard(String playerCardId);
   void attackFace(String attackerId);
