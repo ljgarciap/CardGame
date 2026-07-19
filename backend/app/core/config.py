@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,6 +13,10 @@ class Settings(BaseSettings):
     smtp_port: int = 1025
     smtp_use_tls: bool = False
     smtp_from: str = "noreply@cardgame.local"
+    # None en dev (Mailhog no pide auth) -- un SMTP real (Gmail, SendGrid,
+    # etc.) sí la exige, así que send_email los pasa solo si están seteados.
+    smtp_user: Optional[str] = None
+    smtp_password: Optional[str] = None
 
     redis_url: str = "redis://localhost:6379/0"
 

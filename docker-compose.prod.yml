@@ -1,0 +1,80 @@
+# Deploy autocontenido: red y contenedores propios de CardGame, sin
+# publicar Postgres/Redis al host (solo el backend y el frontend son
+# alcanzables desde afuera) y sin ninguna dependencia de infraestructura
+# compartida del VPS (Coolify, Traefik, etc.) -- tiene que poder correr
+# igual en cualquier VPS limpio, no solo en este de prueba.
+#
+# Puertos configurables por variable de entorno (ver .env en el servidor,
+# no versionado) para poder correr junto a otros proyectos en el mismo
+# VPS sin chocar puertos -- mismo criterio que
+# docker-compose.override.yml usa en local (ver .claude/skills/run/SKILL.md).
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=cardgame
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=card_game
+    volumes:
+      - cardgame_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cardgame -d card_game"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailhog:
+    image: mailhog/mailhog
+    restart: always
+    ports:
+      - "${MAILHOG_UI_PORT:-8025}:8025" # solo la UI web, para revisar emails de prueba
+
+  backend:
+    image: ghcr.io/ljgarciap/cardgame-backend:${IMAGE_TAG:-latest}
+    restart: always
+    ports:
+      - "${BACKEND_PORT:-8001}:8000"
+    environment:
+      - DATABASE_URL=postgresql://cardgame:${DB_PASSWORD}@db:5432/card_game
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - SMTP_HOST=${SMTP_HOST:-mailhog}
+      - SMTP_PORT=${SMTP_PORT:-1025}
+      - SMTP_USE_TLS=${SMTP_USE_TLS:-false}
+      - SMTP_FROM=${SMTP_FROM:-noreply@cardgame.local}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  frontend:
+    image: ghcr.io/ljgarciap/cardgame-frontend:${IMAGE_TAG:-latest}
+    restart: always
+    ports:
+      - "${FRONTEND_PORT:-8888}:80"
+    depends_on:
+      - backend
+
+volumes:
+  cardgame_db_data:

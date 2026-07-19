@@ -850,3 +850,76 @@ formal no aplica (rol no activado todavía en CardGame).
     ya hizo falta en `admin_coins_page_test.dart`.
   - 4 tests nuevos en `test/presentation/match_page_test.dart`. 65 tests
     frontend pasan.
+
+## 2026-07-19 (2)
+- **Deploy a VPS de prueba — primera vuelta, en curso**. Luis quiere
+  probar la app en el celular. VPS de prueba (`2.25.79.64`,
+  `srv1810048.hstgr.cloud`) compartido con ZIA Carbon Control, que corre
+  ahí gestionado por **Coolify** (Traefik como proxy, ocupa 80/443 en todo
+  el VPS). Dos restricciones explícitas de Luis, no negociables: (1) el
+  deploy de CardGame no puede romper lo de ZIA, (2) no puede depender de
+  nada de Coolify, porque el VPS de producción real no lo va a tener —
+  así que el pipeline tiene que ser 100% portable a un VPS limpio.
+  - **Verificado en vivo antes de diseñar nada** (no supuesto): until SSH
+    al VPS confirmó que Coolify/Traefik tiene 80/443 tomados
+    (`docker-proxy` en `ss -tlnp`), que los contenedores de ZIA no
+    publican puertos al host directo (Traefik rutea por labels + red
+    `coolify`), y que sobran recursos (6.4GB RAM libres de 7.8GB, 89GB
+    disco). Descartado un primer diseño que reusaba el Traefik existente
+    vía labels — no cumplía la restricción (2).
+  - **Decisión final**: CardGame corre 100% aislado — su propio
+    `docker-compose.prod.yml`, su propia red Docker, sin publicar
+    Postgres/Redis al host, sin tocar contenedores/red/proxy de Coolify
+    ni de ZIA. Puertos elegidos evitando todo lo ya ocupado en el VPS
+    (22, 80, 443, 6001, 6002, 8000, 8080): backend `8001`, frontend
+    `8888`, Mailhog UI `8025`.
+  - **Sin dominio por ahora**: Luis solo quiere ver cómo se siente en el
+    celular, no vale la pena el trabajo de DNS + Let's Encrypt (que
+    además no es directo sin el puerto 80 libre) para esta prueba. Se
+    prueba por IP directa (`http://2.25.79.64:8888`). El
+    `docker-compose.prod.yml` y el nginx del frontend ya quedan armados
+    listos para 80/443 + certbot real para cuando exista el VPS de
+    producción de verdad — no hay que rehacerlos.
+  - **Clave SSH dedicada para el deploy** (`~/.ssh/cardgame_deploy`, no
+    la clave personal de Luis) — mismo criterio que ya usa `binax_deploy`:
+    si el secreto del repo se filtra algún día, solo compromete este
+    deploy puntual. Agregada a `authorized_keys` de `root` en el VPS
+    (confirmado el usuario SSH real es `root`, no el email que Luis
+    supuso al principio).
+  - **Gap real encontrado armando esto**: `app/core/email.py` no
+    soportaba SMTP autenticado (sin `username`/`password`) — funcionaba
+    con Mailhog (no pide auth) pero un SMTP real (Gmail, SendGrid, etc.)
+    lo exige. Se agregaron `smtp_user`/`smtp_password` opcionales a
+    `Settings` y se pasan a `aiosmtplib.send()` solo si están seteados
+    (`None` preserva el comportamiento anterior con Mailhog). Luis pidió
+    SMTP real pero todavía no pasó las credenciales — la primera vuelta
+    de deploy queda con Mailhog por defecto (UI expuesta en el puerto
+    8025) para no bloquear "ver la app en el celu" esperando eso; swap a
+    SMTP real después es solo cambiar secretos del repo, no tocar código.
+  - Nuevo `GET /api/health` (chequea conexión real a Postgres, no solo
+    "el proceso está vivo" — mismo patrón que ya usa ZIA) con test en
+    `tests/test_health.py`.
+  - **Nuevo, no existía**: `frontend/Dockerfile` (multi-stage, Flutter
+    3.32.8 — misma versión pineada que CI y dev local, ver la nota de
+    "stable es un blanco móvil" de 2026-07-17 — build web + nginx
+    sirviendo estático) + `frontend/nginx.conf` + `frontend/.dockerignore`.
+    `API_BASE_URL` se hornea en el bundle JS en tiempo de build (no es
+    algo que se pueda cambiar después sin recompilar), vía `ARG`
+    inyectado desde el workflow. Probado el build y el run localmente
+    antes de subir nada — compila y sirve bien.
+  - `.github/workflows/deploy-vps.yml` nuevo: `workflow_dispatch` manual
+    a propósito (no automático en cada push — VPS compartido, todavía
+    validando que el pipeline funciona), build+push de imágenes a GHCR
+    (`ghcr.io/ljgarciap/cardgame-{backend,frontend}`), deploy vía SSH
+    (`appleboy/ssh-action`) que escribe un `.env` en el VPS (nunca en el
+    repo) con los secretos, corre `docker compose up -d` + migraciones +
+    los 4 seeds, y hace polling de `/api/health`.
+  - **Bloqueado, requiere acción de Luis**: la sesión de `gh` de esta
+    máquina está autenticada como `desarrolloLafayette`, no como
+    `ljgarciap` (dueño del repo) — sin permiso de admin para gestionar
+    Secrets/Variables vía API aunque sí puede pushear código. Luis tiene
+    que cargar los secretos a mano desde la UI de GitHub
+    (`VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`, `CARDGAME_DB_PASSWORD`,
+    `CARDGAME_JWT_SECRET`, `CARDGAME_SMTP_*`, y la variable
+    `CARDGAME_API_BASE_URL`) antes de poder correr el workflow por
+    primera vez.
