@@ -21,7 +21,6 @@ frontend/.flutter-plugins-dependencies
 frontend/.metadata
 frontend/.packages
 frontend/build/
-frontend/pubspec.lock
 frontend/ios/Flutter/Generated.xcconfig
 frontend/ios/Flutter/flutter_export_environment.sh
 frontend/android/key.properties
