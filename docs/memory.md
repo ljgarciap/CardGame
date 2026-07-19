@@ -923,3 +923,28 @@ formal no aplica (rol no activado todavía en CardGame).
     `CARDGAME_JWT_SECRET`, `CARDGAME_SMTP_*`, y la variable
     `CARDGAME_API_BASE_URL`) antes de poder correr el workflow por
     primera vez.
+
+## 2026-07-19 (3)
+
+- **Primer run real de `deploy-vps.yml` (disparado a mano por Luis tras
+  cargar los secretos) falló en el build del frontend**: `frontend/pubspec.lock`
+  estaba en `.gitignore` (hábito de package Dart, no de app) y nunca se
+  había commiteado, así que el `COPY pubspec.yaml pubspec.lock ./` del
+  Dockerfile no encontraba el archivo en CI (sí existía en el filesystem
+  local, por eso el build local de prueba de antes no lo detectó). Fix:
+  se sacó `frontend/pubspec.lock` de `.gitignore` y se commiteó — para una
+  app (no un package) conviene versionarlo igual que un
+  `package-lock.json`/`poetry.lock`, da builds reproducibles y hubiera
+  evitado este bloqueo.
+- **Trigger de `deploy-vps.yml` pasó de manual (`workflow_dispatch` solo)
+  a automático**, a pedido explícito de Luis ("si esta bien hecho y no
+  rompe nada en zia no veo porque no dejarlo automático") tras el primer
+  run exitoso del backend. Se replicó el patrón que ya usa ZIA en este
+  mismo VPS (`ZiaMonorepo/.github/workflows/deploy-vps.yml`, ya probado
+  ahí): `on: workflow_run` escuchando al workflow `CI` sobre `master`,
+  gateado por `if: github.event.workflow_run.conclusion == 'success'`, con
+  checkout explícito al `head_sha` del run de CI (no al `github.sha` por
+  defecto, que en un evento `workflow_run` no siempre es el commit
+  correcto). Se dejó `workflow_dispatch` además como fallback manual (para
+  poder relanzar sin necesitar un commit nuevo, ej. al iterar sobre
+  secretos) — ZIA no lo tiene, es un agregado propio de CardGame.
