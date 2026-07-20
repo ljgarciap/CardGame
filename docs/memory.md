@@ -1018,6 +1018,17 @@ formal no aplica (rol no activado todavía en CardGame).
   - Decisión de secuencia de Luis: resolver primero el bug de balance
     urgente de arriba (bloquea probar el juego hoy); Tríadas se retoma
     después con spec formal dedicada, no se mezcla con el fix urgente.
+  - **2026-07-20: retomado.** Spec formal en
+    `docs/specs/game-mode-triadas.md` — modo nuevo, **no reemplaza** al
+    clásico (confirmado por Luis). Preguntas de mecánica cerradas en esa
+    sesión: reequipar tiene costo (la carta vieja se descarta, no vuelve
+    a mano), poner Equipo/Magia sobre un Personaje vivo es una acción
+    aparte que NO consume la jugada del turno (sí se puede jugar
+    Personaje + equiparlo en el mismo turno), y Equipo/Magia salen del
+    mismo sistema de gacha que los Personajes (rango+rareza, no un
+    catálogo aparte). Pendiente: números de balance, asignación de tipo
+    por arquetipo, diseño técnico y de UX — ver la spec para el detalle
+    completo de qué falta.
 
 ## 2026-07-20
 

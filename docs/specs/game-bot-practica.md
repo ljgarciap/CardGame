@@ -77,14 +77,16 @@ una necesidad hipotética).
   `match_store`, mismo `save_match`/`publish_match_update`) — no hace
   falta un mecanismo de difusión aparte.
 
-## Balance — nota importante, no es un bug
+## Balance
 
-`STARTING_LIFE` (20) es menor al ataque base de incluso la carta más floja
-del catálogo (Hero, 30 de ataque). Un solo golpe sin bloquear ya deja al
-rival en 0 de vida. Esto ya era así en el motor de combate antes de este
-bot (regla de juego fija del Game Expert, `match_engine.py`) — el bot
-simplemente lo hereda. Partidas de 1-2 turnos son esperables y correctas,
-no un síntoma de que el bot esté roto.
+Actualizado 2026-07-19 — la nota original de esta sección quedó
+desactualizada. `STARTING_LIFE` (20) contra ataque base 30-108 hacía que
+cualquier carta matara de un solo golpe: eso SÍ era un bug real (encontrado
+jugando contra este bot en el VPS), no una regla de diseño, y ya se
+corrigió — ver `docs/memory.md` 2026-07-19 y `docs/specs/game-gacha-engine.md`.
+Balance actual vive en `combat_balance_config`/`rank_base_stats`
+(ajustable sin deploy vía `/api/admin/combat-balance`), no hardcodeado.
+Con los valores por default ninguna carta mata de un solo golpe.
 
 ## Verificación
 
