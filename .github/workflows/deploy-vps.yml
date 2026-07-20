@@ -123,6 +123,7 @@ jobs:
             docker compose -f docker-compose.prod.yml exec -T backend python -m app.db.seed_deck_config
             docker compose -f docker-compose.prod.yml exec -T backend python -m app.db.seed_combat_balance
             docker compose -f docker-compose.prod.yml exec -T backend python -m app.db.seed_superadmin
+            docker compose -f docker-compose.prod.yml exec -T backend python -m app.db.seed_test_users
 
       - name: Esperar a que el backend esté saludable
         run: |
