@@ -3,7 +3,7 @@ procesa una acción le avisa al worker que tiene la conexión WebSocket del
 rival (ver docs/designs/realtime-match.md, sección "Cómo se enteran los
 workers unos de otros: Pub/Sub por partida").
 """
-from typing import AsyncIterator, NamedTuple
+from typing import AsyncIterator, NamedTuple, Optional
 from uuid import UUID
 
 from pydantic import TypeAdapter
@@ -30,7 +30,7 @@ def _channel(match_id: UUID) -> str:
     return f"match:{match_id}:events"
 
 
-async def publish_match_update(match: Match, events: list[AttackEvent] | None = None) -> None:
+async def publish_match_update(match: Match, events: Optional[list[AttackEvent]] = None) -> None:
     client = await get_redis_client()
     payload = {
         "match": match.model_dump(mode="json"),
