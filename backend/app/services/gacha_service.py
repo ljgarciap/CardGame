@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.card_archetype import CardArchetype
+from app.models.combat_balance import RankBaseStat
 from app.models.enums import Faction, Rank, Rarity
 from app.models.gacha_config import (
     GachaPackLevel,
@@ -22,6 +23,7 @@ from app.models.gacha_config import (
     GachaRarityBonus,
     GachaRarityProbability,
 )
+from app.services.combat_balance import get_or_create_rank_base_stats
 
 # Cardinalidad fija del catálogo de niveles (definida por el Game Expert) —
 # no es un valor de negocio ajustable, a diferencia de precio/probabilidades.
@@ -108,14 +110,18 @@ def _get_rarity_bonus(rarity_bonus: Dict[Rarity, Decimal], rarity: Rarity) -> De
 
 
 def _calculate_stats(
-    archetype: CardArchetype, rarity: Rarity, rarity_bonus: Dict[Rarity, Decimal]
+    archetype: CardArchetype,
+    rarity: Rarity,
+    rarity_bonus: Dict[Rarity, Decimal],
+    rank_base_stats: Dict[Rank, RankBaseStat],
 ) -> tuple[int, int]:
     # round() de Python usa banker's rounding (half-to-even): round(30*1.35) da 40,
     # pero la tabla del spec (docs/specs/game-gacha-engine.md) exige 41 para
     # Hero+Legendary -> se necesita redondeo half-up explícito, no el round() nativo.
     multiplier = Decimal(1) + _get_rarity_bonus(rarity_bonus, rarity)
-    attack = _round_half_up(Decimal(archetype.base_attack) * multiplier)
-    defense = _round_half_up(Decimal(archetype.base_defense) * multiplier)
+    base = rank_base_stats[archetype.rank]
+    attack = _round_half_up(Decimal(base.base_attack) * multiplier)
+    defense = _round_half_up(Decimal(base.base_defense) * multiplier)
     return attack, defense
 
 
@@ -144,6 +150,7 @@ def generate_pack(db: Session, level: int) -> List[GeneratedCard]:
     rank_probs = _load_rank_probabilities(db, level)
     rarity_probs = _load_rarity_probabilities(db, level)
     rarity_bonus = load_rarity_bonus(db)
+    rank_base_stats = get_or_create_rank_base_stats(db)
     archetypes_by_key = _load_archetypes_by_key(db)
 
     cards: List[GeneratedCard] = []
@@ -152,7 +159,7 @@ def generate_pack(db: Session, level: int) -> List[GeneratedCard]:
         rarity = weighted_choice(rarity_probs)
         faction = uniform_choice(list(Faction))
         archetype = _get_archetype(archetypes_by_key, faction, rank)
-        attack, defense = _calculate_stats(archetype, rarity, rarity_bonus)
+        attack, defense = _calculate_stats(archetype, rarity, rarity_bonus, rank_base_stats)
         cards.append(GeneratedCard(archetype=archetype, rarity=rarity, attack=attack, defense=defense))
 
     # guaranteed_min_rank es intencionalmente independiente de rank_probs: es
@@ -169,7 +176,7 @@ def generate_pack(db: Session, level: int) -> List[GeneratedCard]:
         if not meets_guarantee:
             last = cards[-1]
             forced_archetype = _get_archetype(archetypes_by_key, last.archetype.faction, min_rank)
-            attack, defense = _calculate_stats(forced_archetype, last.rarity, rarity_bonus)
+            attack, defense = _calculate_stats(forced_archetype, last.rarity, rarity_bonus, rank_base_stats)
             cards[-1] = GeneratedCard(
                 archetype=forced_archetype, rarity=last.rarity, attack=attack, defense=defense
             )

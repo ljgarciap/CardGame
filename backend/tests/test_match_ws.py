@@ -26,8 +26,6 @@ def _make_player(db_session, *, username: str) -> tuple[User, list[str]]:
         name="Achilles",
         faction=Faction.greek,
         rank=Rank.hero,
-        base_attack=30,
-        base_defense=30,
         description="test",
     )
     db_session.add(archetype)

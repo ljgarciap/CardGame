@@ -22,6 +22,7 @@ from app.db.session import SessionLocal
 from app.models.user import User
 from app.services import bot, match_pubsub, match_store, matchmaking, user_notify
 from app.services.card_ownership import load_owned_cards
+from app.services.combat_balance import get_or_create_combat_balance_config
 from app.services.match_engine import (
     DECK_SIZE,
     CardInPlay,
@@ -99,6 +100,17 @@ async def _resolve_deck(user: User, raw_deck: list) -> list[CardInPlay]:
     return await run_in_threadpool(_resolve_deck_sync, user.id, raw_deck)
 
 
+def _load_starting_life_sync() -> int:
+    with SessionLocal() as db:
+        config = get_or_create_combat_balance_config(db)
+        db.commit()
+        return config.starting_life
+
+
+async def _load_starting_life() -> int:
+    return await run_in_threadpool(_load_starting_life_sync)
+
+
 async def _try_start_match() -> None:
     """Se llama después de cada `queue` exitoso — si hay 2+ jugadores en
     cola, arma la partida y avisa a ambos por user_notify (sin importar en
@@ -108,10 +120,12 @@ async def _try_start_match() -> None:
         return
 
     entry_a, entry_b = pair
+    starting_life = await _load_starting_life()
     match = start_match(
         match_id=uuid.uuid4(),
         player_a=(entry_a.user_id, entry_a.username, entry_a.deck),
         player_b=(entry_b.user_id, entry_b.username, entry_b.deck),
+        starting_life=starting_life,
     )
     await match_store.save_match(match)
 
@@ -140,7 +154,13 @@ async def _handle_queue(user: User, raw_deck: list, websocket: WebSocket) -> Non
 
 def _build_bot_deck_sync() -> list[CardInPlay]:
     with SessionLocal() as db:
-        return bot.build_bot_deck(db)
+        # get_or_create_rank_base_stats (dentro de build_bot_deck) hace
+        # flush, no commit -- normalmente ya está sembrado por la migración
+        # y esto es un no-op, pero si algún ambiente llega sin sembrar, el
+        # commit evita que la fila creada se pierda al cerrar la sesión.
+        deck = bot.build_bot_deck(db)
+        db.commit()
+        return deck
 
 
 async def _handle_start_bot_match(user: User, raw_deck: list, websocket: WebSocket) -> None:
@@ -159,11 +179,13 @@ async def _handle_start_bot_match(user: User, raw_deck: list, websocket: WebSock
 
     human_cards = await _resolve_deck(user, raw_deck)
     bot_cards = await run_in_threadpool(_build_bot_deck_sync)
+    starting_life = await _load_starting_life()
 
     match = start_match(
         match_id=uuid.uuid4(),
         player_a=(user.id, user.username, human_cards),
         player_b=(bot.BOT_USER_ID, bot.BOT_USERNAME, bot_cards),
+        starting_life=starting_life,
     )
     bot.run_bot_turn(match)  # por si el orden de turno al azar le tocó arrancar a él
     await match_store.save_match(match)

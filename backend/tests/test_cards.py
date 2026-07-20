@@ -33,8 +33,6 @@ def _give_card(db_session, user, *, name="Achilles"):
         name=name,
         faction=Faction.greek,
         rank=Rank.hero,
-        base_attack=30,
-        base_defense=30,
         description="test",
     )
     db_session.add(archetype)

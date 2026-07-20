@@ -12,6 +12,7 @@ from app.db.seed_gacha_config import (
 from app.models.card_archetype import CardArchetype
 from app.models.enums import Faction, Rank, Rarity
 from app.models.gacha_config import GachaPackLevel
+from app.services.combat_balance import get_or_create_rank_base_stats
 from app.services.gacha_service import (
     RANK_ORDER,
     IncompleteGachaConfigError,
@@ -113,13 +114,13 @@ def test_invalid_level_raises_value_error(seeded, level):
 @pytest.mark.parametrize(
     "rank, rarity, expected",
     [
-        (Rank.hero, Rarity.common, 30),  # round(30 * 1.00)
-        (Rank.hero, Rarity.rare, 33),  # round(30 * 1.10)
-        (Rank.hero, Rarity.epic, 36),  # round(30 * 1.20)
-        (Rank.hero, Rarity.legendary, 41),  # 30 * 1.35 = 40.5 -> half-up -> 41
-        (Rank.demigod, Rarity.rare, 50),  # 45 * 1.10 = 49.5 -> half-up -> 50
-        (Rank.minor_god, Rarity.epic, 72),  # round(60 * 1.20)
-        (Rank.major_god, Rarity.legendary, 108),  # round(80 * 1.35)
+        (Rank.hero, Rarity.common, 2),  # round(2 * 1.00)
+        (Rank.hero, Rarity.rare, 2),  # round(2 * 1.10) = round(2.2)
+        (Rank.hero, Rarity.epic, 2),  # round(2 * 1.20) = round(2.4)
+        (Rank.hero, Rarity.legendary, 3),  # 2 * 1.35 = 2.7 -> half-up -> 3
+        (Rank.demigod, Rarity.rare, 3),  # 3 * 1.10 = 3.3 -> half-up -> 3
+        (Rank.minor_god, Rarity.epic, 5),  # 4 * 1.20 = 4.8 -> half-up -> 5
+        (Rank.major_god, Rarity.legendary, 8),  # 6 * 1.35 = 8.1 -> half-up -> 8
     ],
 )
 def test_rarity_stat_bonus_formula(seeded, rank, rarity, expected):
@@ -129,7 +130,8 @@ def test_rarity_stat_bonus_formula(seeded, rank, rarity, expected):
         .one()
     )
     rarity_bonus = load_rarity_bonus(seeded)
-    attack, defense = _calculate_stats(archetype, rarity, rarity_bonus)
+    rank_base_stats = get_or_create_rank_base_stats(seeded)
+    attack, defense = _calculate_stats(archetype, rarity, rarity_bonus, rank_base_stats)
     assert attack == expected
     assert defense == expected
 

@@ -8,13 +8,6 @@ from sqlalchemy.orm import Session
 from app.models.card_archetype import CardArchetype
 from app.models.enums import Faction, Rank
 
-BASE_STATS = {
-    Rank.hero: 30,
-    Rank.demigod: 45,
-    Rank.minor_god: 60,
-    Rank.major_god: 80,
-}
-
 ARCHETYPES = [
     (Faction.greek, Rank.hero, "Achilles, the Unyielding",
      "El campeón de Ftía, casi invulnerable en batalla."),
@@ -92,14 +85,11 @@ def seed_archetypes(session: Session) -> None:
     for faction, rank, name, description in ARCHETYPES:
         if (faction, rank) in existing:
             continue
-        base = BASE_STATS[rank]
         session.add(
             CardArchetype(
                 name=name,
                 faction=faction,
                 rank=rank,
-                base_attack=base,
-                base_defense=base,
                 description=description,
             )
         )

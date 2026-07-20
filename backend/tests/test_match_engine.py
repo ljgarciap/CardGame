@@ -7,7 +7,6 @@ from app.services.match_engine import (
     DECK_SIZE,
     MAX_BOARD_SIZE,
     STARTING_HAND_SIZE,
-    STARTING_LIFE,
     CardInPlay,
     MatchRuleViolation,
     attack,
@@ -18,6 +17,12 @@ from app.services.match_engine import (
     play_card,
     start_match,
 )
+
+# La vida inicial ya no es una constante de match_engine (ahora vive en
+# combat_balance_config, ver docs/memory.md 2026-07-19) -- estos tests
+# ejercitan las reglas puras del motor, así que el valor concreto no
+# importa, solo que sea consistente entre `_new_match` y las assertions.
+TEST_STARTING_LIFE = 20
 
 
 def _make_card(attack_stat: int = 30, defense: int = 30, name: str = "Test Card") -> CardInPlay:
@@ -43,6 +48,7 @@ def _new_match():
         match_id=uuid.uuid4(),
         player_a=(a_id, "alice", _make_deck()),
         player_b=(b_id, "bob", _make_deck()),
+        starting_life=TEST_STARTING_LIFE,
     )
     return match, a_id, b_id
 
@@ -131,7 +137,7 @@ def test_attack_face_reduces_opponent_life():
 
     attack(match, first, attacker.player_card_id, target="face")
 
-    assert match.players[second].life == STARTING_LIFE - 7
+    assert match.players[second].life == TEST_STARTING_LIFE - 7
 
 
 def test_life_is_clamped_at_zero_not_negative():

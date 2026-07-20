@@ -4,6 +4,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.api.admin.coins import router as coins_admin_router
+from app.api.admin.combat_balance import router as combat_balance_admin_router
 from app.api.admin.deck_config import router as deck_config_admin_router
 from app.api.admin.gacha_config import router as gacha_config_admin_router
 from app.api.auth import router as auth_router
@@ -23,6 +24,7 @@ app.include_router(cards_router)
 app.include_router(decks_router)
 app.include_router(gacha_config_admin_router)
 app.include_router(deck_config_admin_router)
+app.include_router(combat_balance_admin_router)
 app.include_router(coins_admin_router)
 app.include_router(match_ws_router)
 

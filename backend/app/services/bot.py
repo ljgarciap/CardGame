@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.models.card_archetype import CardArchetype
 from app.models.enums import Rarity
+from app.services.combat_balance import get_or_create_rank_base_stats
 from app.services.match_engine import (
     DECK_SIZE,
     MAX_BOARD_SIZE,
@@ -42,6 +43,7 @@ def build_bot_deck(db: Session) -> List[CardInPlay]:
         .scalars()
         .all()
     )
+    rank_base_stats = get_or_create_rank_base_stats(db)
     return [
         CardInPlay(
             player_card_id=uuid.uuid4(),
@@ -49,9 +51,9 @@ def build_bot_deck(db: Session) -> List[CardInPlay]:
             faction=archetype.faction,
             rank=archetype.rank,
             rarity=Rarity.common,
-            attack=archetype.base_attack,
-            max_defense=archetype.base_defense,
-            current_defense=archetype.base_defense,
+            attack=rank_base_stats[archetype.rank].base_attack,
+            max_defense=rank_base_stats[archetype.rank].base_defense,
+            current_defense=rank_base_stats[archetype.rank].base_defense,
         )
         for archetype in archetypes
     ]

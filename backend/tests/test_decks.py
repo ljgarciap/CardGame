@@ -38,8 +38,6 @@ def _give_cards(db_session, user, count=DECK_SIZE, *, name="Achilles"):
         name=name,
         faction=Faction.greek,
         rank=Rank.hero,
-        base_attack=30,
-        base_defense=30,
         description="test",
     )
     db_session.add(archetype)

@@ -3,10 +3,15 @@ WebSocket ni Postgres acá), 100% testeable con objetos en memoria. Ver
 docs/specs/realtime-match.md (regla de juego) y
 docs/designs/realtime-match.md (protocolo/arquitectura).
 
-Constantes de partida (mazo/vida/mano/tablero): son reglas de juego fijas
+DECK_SIZE/STARTING_HAND_SIZE/MAX_BOARD_SIZE: reglas de juego fijas
 definidas por el Game Expert, no valores de negocio ajustables (misma
 categoría que MIN_LEVEL/MAX_LEVEL en gacha_service.py) — no van a una tabla
-paramétrica.
+paramétrica. La vida inicial NO entra en esa categoría (a diferencia de lo
+que este comentario decía antes) — bug real encontrado jugando contra el
+bot en el VPS: con vida fija en 20 y el ataque real de las cartas del
+gacha entre 30 y 108, cualquier carta mataba de un solo golpe. Ahora vive
+en `combat_balance_config` (app/models/combat_balance.py), ajustable por
+un superadmin sin deploy — ver `start_match`.
 """
 import random
 from typing import Optional, Union
@@ -17,7 +22,6 @@ from pydantic import BaseModel
 from app.models.enums import Faction, Rank, Rarity
 
 DECK_SIZE = 10
-STARTING_LIFE = 20
 STARTING_HAND_SIZE = 3
 MAX_BOARD_SIZE = 5
 
@@ -45,7 +49,7 @@ class CardInPlay(BaseModel):
 class MatchPlayerState(BaseModel):
     user_id: UUID
     username: str
-    life: int = STARTING_LIFE
+    life: int
     deck: list[CardInPlay] = []
     hand: list[CardInPlay] = []
     board: list[CardInPlay] = []
@@ -119,14 +123,17 @@ def start_match(
     match_id: UUID,
     player_a: tuple[UUID, str, list[CardInPlay]],
     player_b: tuple[UUID, str, list[CardInPlay]],
+    starting_life: int,
 ) -> Match:
     """player_a/player_b: (user_id, username, cartas del deck elegido —
-    exactamente DECK_SIZE, ya resueltas desde player_cards por el caller)."""
+    exactamente DECK_SIZE, ya resueltas desde player_cards por el caller).
+    starting_life: leído de combat_balance_config por el caller (WS layer),
+    no un default fijo acá — este módulo es puro/sin I/O, no puede leer DB."""
     (a_id, a_name, a_cards), (b_id, b_name, b_cards) = player_a, player_b
 
     players = {
-        a_id: MatchPlayerState(user_id=a_id, username=a_name, deck=_shuffled(a_cards)),
-        b_id: MatchPlayerState(user_id=b_id, username=b_name, deck=_shuffled(b_cards)),
+        a_id: MatchPlayerState(user_id=a_id, username=a_name, life=starting_life, deck=_shuffled(a_cards)),
+        b_id: MatchPlayerState(user_id=b_id, username=b_name, life=starting_life, deck=_shuffled(b_cards)),
     }
 
     turn_order = [a_id, b_id]

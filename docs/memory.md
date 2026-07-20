@@ -948,3 +948,73 @@ formal no aplica (rol no activado todavía en CardGame).
   correcto). Se dejó `workflow_dispatch` además como fallback manual (para
   poder relanzar sin necesitar un commit nuevo, ej. al iterar sobre
   secretos) — ZIA no lo tiene, es un agregado propio de CardGame.
+
+## 2026-07-19 (4)
+
+- **Bug crítico de balance encontrado jugando en el VPS**: `STARTING_LIFE = 20`
+  (`match_engine.py`) contra cartas reales del gacha con ataque 30-108
+  (`docs/specs/game-gacha-engine.md`) — cualquier carta, hasta la más
+  débil, mata de un solo golpe porque no hay bloqueo forzado (el
+  atacante siempre puede elegir ir directo a la cara). Nunca se agarró
+  antes porque el bot de práctica solo se había probado con unit tests
+  (stats fijos) y una partida en vivo, nunca con stats reales de un
+  mazo armado desde el gacha. Fix (números + posible migración
+  retroactiva de `player_cards` ya emitidos) todavía pendiente de
+  implementar — quedó pausado por la iniciativa de Tríadas de abajo,
+  se retoma con prioridad.
+- **Iniciativa de diseño grande propuesta por Luis, todavía sin spec formal
+  — "modo Tríadas"**: rediseño del modelo de combate completo, anotado
+  acá para no perderlo, a retomar en una sesión de diseño dedicada
+  (Game Expert + Arquitecto + UX/UI) antes de tocar código. Reemplaza el
+  tablero plano de hasta 5 criaturas por 3 **zonas fijas y distintas**
+  por jugador (Personaje / Equipo / Magia-Tipo), no 3 copias iguales:
+  - Cada zona tiene como máximo 1 carta. Ninguna es obligatoria, **salvo
+    que sin Personaje en campo la vida del jugador queda expuesta a
+    ataque directo** — mientras el Personaje esté vivo, el rival
+    siempre tiene que atacarlo a él, no puede saltarlo (confirmado por
+    Luis: sí, es un bloqueo obligatorio real). Esto resuelve de raíz
+    un hueco de diseño que el motor actual tiene hoy: sin esta regla,
+    un atacante siempre puede ignorar lo que el rival tenga en el
+    tablero e ir directo a la cara — no hay ningún incentivo real para
+    "bloquear" con nada.
+  - Solo el Personaje pelea (recibe/hace daño). Equipo y Magia no son
+    entidades separadas — modifican al Personaje vía fórmula:
+    `(ataque base del Personaje + bono plano de Equipo) × multiplicador
+    de Magia`.
+  - La tríada se arma con el tiempo (jugás el Personaje, le sumás
+    Equipo/Magia en turnos posteriores cuando convenga), y Equipo/Magia
+    en un Personaje vivo se pueden reemplazar libremente (confirmado
+    por Luis) — probablemente con costo (la carta vieja se pierde, no
+    vuelve a mano; falta definir en el spec).
+  - Si el Personaje muere, se limpia la zona entera — el Equipo/Magia
+    puestos se pierden con él, no se reciclan a otro Personaje. Un
+    Personaje nuevo siempre entra pelado — no se puede pre-cargar
+    Equipo/Magia antes de que haya un Personaje en campo (confirmado
+    por Luis). Esto le da peso real a perder tu Personaje: no perdés
+    una carta, perdés toda la inversión de la tríada.
+  - Mazo de 30 cartas (subió de 15 a 30 durante la charla, según se fue
+    afinando el modelo).
+  - Cada carta de personaje existente (arquetipo del catálogo) debería
+    poder tener uno de los tres atributos (Personaje/Equipo/Magia)
+    según su lore — coherente con el trabajo de autenticidad cultural
+    ya hecho (Muisca, "El Tejido"). Existiría también un catálogo de
+    cartas dedicadas de Equipo y Magia (no ligadas a un personaje
+    puntual), más fuertes en su rol que un personaje usando su propio
+    atributo como sustituto, y utilizables como Personaje de reemplazo
+    pero por debajo del promedio si hace falta.
+  - Viabilidad: es una reescritura grande del motor de partida (tablero
+    plano de `CardInPlay` → 3 zonas tipadas + sistema de fórmula/attach),
+    del protocolo WS (nuevas acciones para equipar/reemplazar), del
+    gacha (nueva dimensión de tipo de carta en las tablas de
+    probabilidad) y de la UI de combate — no es un ajuste, es una v2
+    del núcleo del juego. Originalidad: la partición en 3 tipos
+    (criatura/hechizo/objeto) no es nueva en TCGs (Hearthstone,
+    Magic, Yu-Gi-Oh todos la tienen), pero "un solo Personaje activo a
+    la vez, potenciado por adjuntos, con exposición directa de vida si
+    no hay Personaje" sí le da una identidad más cercana a un duelo
+    1v1 de héroe-equipado que a un TCG de tablero ancho genérico —
+    encaja bien con el tema de "jugás un dios/héroe a la vez" en vez de
+    un ejército abstracto.
+  - Decisión de secuencia de Luis: resolver primero el bug de balance
+    urgente de arriba (bloquea probar el juego hoy); Tríadas se retoma
+    después con spec formal dedicada, no se mezcla con el fix urgente.

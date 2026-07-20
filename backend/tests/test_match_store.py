@@ -23,8 +23,8 @@ def _make_match() -> Match:
     return Match(
         id=uuid.uuid4(),
         players={
-            a_id: MatchPlayerState(user_id=a_id, username="alice", hand=[card]),
-            b_id: MatchPlayerState(user_id=b_id, username="bob"),
+            a_id: MatchPlayerState(user_id=a_id, username="alice", life=20, hand=[card]),
+            b_id: MatchPlayerState(user_id=b_id, username="bob", life=20),
         },
         turn_order=[a_id, b_id],
     )

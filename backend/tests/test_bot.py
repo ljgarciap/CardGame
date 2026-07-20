@@ -35,6 +35,7 @@ def _new_bot_match(*, bot_hand=None, bot_board=None, human_board=None) -> tuple[
             bot.BOT_USER_ID: MatchPlayerState(
                 user_id=bot.BOT_USER_ID,
                 username=bot.BOT_USERNAME,
+                life=20,
                 deck=_make_deck(),
                 hand=bot_hand or [],
                 board=bot_board or [],
@@ -42,6 +43,7 @@ def _new_bot_match(*, bot_hand=None, bot_board=None, human_board=None) -> tuple[
             human_id: MatchPlayerState(
                 user_id=human_id,
                 username="human",
+                life=20,
                 deck=_make_deck(),
                 board=human_board or [],
             ),
@@ -184,13 +186,12 @@ def test_end_turn_against_bot_comes_back_to_the_human(client, db_session):
         ws.send_json({"action": "end_turn"})
         after_bot_turn = ws.receive_json()
 
-        # STARTING_LIFE (20) es menor al ataque base de incluso la carta
-        # más floja del catálogo (Hero, 30) -- con un mazo real al azar el
-        # bot puede perfectamente ganar de un solo golpe a la cara en su
-        # primer o segundo turno. No es un bug de este test ni del bot,
-        # es el balance ya definido en match_engine.py -- de ahí que acá
-        # se acepten ambos desenlaces en vez de asumir que el intercambio
-        # de turnos siempre sigue vivo.
+        # Con el balance actual (combat_balance_config, ver docs/memory.md
+        # 2026-07-19) ninguna carta mata de un solo golpe, así que en la
+        # práctica esto va a ser casi siempre state_update -- pero se
+        # acepta también match_over en vez de asumirlo, para no acoplar
+        # este test de integración a los valores concretos de balance
+        # (que son ajustables sin deploy y pueden volver a cambiar).
         assert after_bot_turn["type"] in ("state_update", "match_over")
         if after_bot_turn["type"] == "state_update":
             assert after_bot_turn["state"]["your_turn"] is True

@@ -29,8 +29,6 @@ def test_seed_archetypes_fills_in_only_missing_ones(db_session):
         name="Placeholder existente",
         faction=Faction.muisca,
         rank=Rank.hero,
-        base_attack=999,
-        base_defense=999,
         description="No debe tocarse ni duplicarse.",
     )
     db_session.add(existing)
@@ -49,4 +47,3 @@ def test_seed_archetypes_fills_in_only_missing_ones(db_session):
         .one()
     )
     assert unchanged.name == "Placeholder existente"
-    assert unchanged.base_attack == 999

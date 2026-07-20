@@ -28,22 +28,37 @@ misma carta — sube el stat, no cambia la identidad. 5 facciones × 4 rangos =
 | Oriental | Li Jing, the Pagoda Bearer | Nezha, the Third Prince | Guan Yu, God of War | Yu Huang, the Jade Emperor |
 
 ### Stats base por rango (antes de bono de rareza)
+Ajustado 2026-07-19 (ver `docs/memory.md` de esa fecha) — los valores
+originales (30/45/60/80) contra `STARTING_LIFE = 20` en el motor de
+partida hacían que cualquier carta matara de un solo golpe, bug
+encontrado jugando contra el bot de práctica en el VPS. Ahora vive en
+`rank_base_stats` (tabla paramétrica, ajustable por un superadmin sin
+deploy vía `/api/admin/combat-balance` — ver
+`app/models/combat_balance.py`), no hardcodeado; los valores de acá son
+el default sembrado, no una constante fija.
+
 | Rango | ATK/DEF base |
 |---|---|
-| Hero | 30 / 30 |
-| Demigod | 45 / 45 |
-| Minor God | 60 / 60 |
-| Major God | 80 / 80 |
+| Hero | 2 / 2 |
+| Demigod | 3 / 3 |
+| Minor God | 4 / 4 |
+| Major God | 6 / 6 |
 
 ### Bono de rareza
 Fórmula: `stat = round(base * (1 + bono))`
 
-| Rareza | Bono | Hero (30 base) | Demigod (45) | Minor God (60) | Major God (80) |
+| Rareza | Bono | Hero (2 base) | Demigod (3) | Minor God (4) | Major God (6) |
 |---|---|---|---|---|---|
-| Common | +0% | 30 | 45 | 60 | 80 |
-| Rare | +10% | 33 | 50 | 66 | 88 |
-| Epic | +20% | 36 | 54 | 72 | 96 |
-| Legendary | +35% | 41 | 61 | 81 | 108 |
+| Common | +0% | 2 | 3 | 4 | 6 |
+| Rare | +10% | 2 | 3 | 4 | 7 |
+| Epic | +20% | 2 | 4 | 5 | 7 |
+| Legendary | +35% | 3 | 4 | 5 | 8 |
+
+`STARTING_LIFE` (vida inicial de cada jugador, `combat_balance_config`,
+también ajustable sin deploy) queda en 20 — con estos valores, la carta
+más floja del juego (Hero común, ataque 2) tarda 10 golpes en matar sola,
+y la más fuerte posible (Major God legendaria, ataque 8) tarda 3 — ninguna
+mata de un solo golpe.
 
 ## Tablas de probabilidad completas (niveles 1-5)
 Los niveles 1, 2 y 5 vienen del código existente (`PackLevel.level1()`,

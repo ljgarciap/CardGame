@@ -40,14 +40,20 @@ la primera feature que se apoya en él):
 
 ## Modelo de datos
 
+Nota 2026-07-19: `base_attack`/`base_defense` se sacaron de `card_archetypes`
+(eran idénticos para toda carta del mismo rango) y pasaron a
+`rank_base_stats`, una tabla paramétrica ajustable sin deploy — ver
+`app/models/combat_balance.py` y `docs/specs/game-gacha-engine.md`. El
+diagrama de abajo queda como registro del diseño original, no como schema
+vigente. `faction` tampoco incluye ya `muisca` (agregada después, ver
+`docs/memory.md`).
+
 ```
 card_archetypes
   id            uuid pk
   name          text
   faction       enum(greek, norse, egyptian, aztec, oriental)
   rank          enum(hero, demigod, minor_god, major_god)
-  base_attack   int
-  base_defense  int
   description   text
 
 player_cards
