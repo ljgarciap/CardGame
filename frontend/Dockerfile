@@ -26,6 +26,20 @@ ARG API_BASE_URL=http://localhost:8001
 # versión real del servidor, no cachear para uso sin conexión.
 RUN flutter build web --release --pwa-strategy=none --dart-define=API_BASE_URL=${API_BASE_URL}
 
+# --pwa-strategy=none genera flutter_service_worker.js vacío (0 bytes) --
+# un dispositivo que ya tenía instalado el service worker viejo (de un
+# build previo a este fix, con cacheo agresivo offline-first) no lo pierde
+# solo con que el archivo nuevo esté vacío: por default, un service worker
+# nuevo queda "esperando" hasta que se cierren TODAS las pestañas que usan
+# el viejo -- nada obliga a eso, así que ese dispositivo puede seguir
+# atascado en la versión vieja para siempre sin que ningún usuario haga
+# nada raro. Se reemplaza el archivo vacío por uno mínimo que se activa
+# de inmediato (skipWaiting + clients.claim) y no cachea nada -- combinado
+# con el listener de controllerchange en index.html, la transición pasa
+# sola en el próximo request sin que el usuario tenga que limpiar nada a
+# mano.
+RUN printf "self.addEventListener('install', () => self.skipWaiting());\nself.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));\n" > /app/build/web/flutter_service_worker.js
+
 # ---- serve stage ----
 FROM nginx:alpine
 COPY --from=build /app/build/web /usr/share/nginx/html

@@ -34,21 +34,24 @@
 </head>
 <body>
   <script>
-    // Limpieza de una sola vez: builds anteriores registraban un service
-    // worker con cacheo agresivo (offline-first, default de Flutter web)
-    // que podía seguir sirviendo una versión vieja del bundle sin tocar la
-    // red, incluso con headers no-cache en el servidor -- ver
-    // docs/memory.md 2026-07-20. El build actual ya no registra ninguno
-    // (--pwa-strategy=none en el Dockerfile), pero un dispositivo que ya
-    // tenía el viejo instalado necesita este desregistro explícito; la
-    // sola ausencia de body en el build nuevo no lo desinstala solo.
+    // Un dispositivo que ya tenía instalado el service worker viejo
+    // (cacheo agresivo offline-first, default de Flutter web previo a
+    // este fix -- ver docs/memory.md 2026-07-20) puede seguir sirviendo
+    // esa versión vieja indefinidamente: el chequeo de actualización del
+    // navegador para flutter_service_worker.js (Dockerfile lo reemplaza
+    // por uno mínimo que hace skipWaiting + clients.claim) pasa por
+    // afuera del propio service worker, así que sí detecta el cambio --
+    // pero por default un service worker nuevo no controla pestañas ya
+    // abiertas hasta que activa. clients.claim() lo fuerza igual, y este
+    // listener recarga UNA vez apenas eso pasa, para que el usuario no
+    // tenga que cerrar la app ni limpiar nada a mano en cada deploy.
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then((registrations) => {
-        registrations.forEach((registration) => registration.unregister());
+      let alreadyReloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (alreadyReloaded) return;
+        alreadyReloaded = true;
+        window.location.reload();
       });
-    }
-    if ('caches' in window) {
-      caches.keys().then((names) => names.forEach((name) => caches.delete(name)));
     }
   </script>
   <script src="flutter_bootstrap.js" async></script>

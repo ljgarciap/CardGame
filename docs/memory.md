@@ -1066,3 +1066,38 @@ formal no aplica (rol no activado todavía en CardGame).
   síntoma del caché viejo (build previo a la corrección de balance,
   quizás aún mostrando los números de vida/ataque rotos) o un problema
   de UI aparte — no se pudo reproducir directo (sin browser conectado).
+- **El fix anterior (unregister-on-load + `--pwa-strategy=none`) no
+  alcanzaba** — Luis lo confirmó ("otra vez me deja sin poder entrar") y
+  marcó, con razón, que pedirle al usuario que limpie datos del sitio a
+  mano en cada deploy no es una solución real para un producto de
+  verdad. Causa: un dispositivo con el service worker viejo (agresivo,
+  offline-first) activo puede seguir interceptando y sirviendo el
+  `index.html` cacheado sin tocar la red -- mi script de limpieza vivía
+  DENTRO de ese `index.html` nuevo, que ese dispositivo nunca llegaba a
+  descargar. Además, ese script desregistraba el service worker en
+  cada carga, lo cual competía con el mecanismo real de arreglo (necesita
+  que el worker nuevo persista y tome control, no que lo maten apenas
+  se instala).
+
+  Fix real, autocurativo, sin acción manual del usuario:
+  - `Dockerfile`: `flutter_service_worker.js` (queda en 0 bytes con
+    `--pwa-strategy=none`) se reemplaza por uno mínimo que llama
+    `self.skipWaiting()` en `install` y `self.clients.claim()` en
+    `activate` -- fuerza a tomar control de inmediato en vez de esperar
+    a que se cierren todas las pestañas que usan el worker viejo (el
+    comportamiento default de un service worker nuevo).
+  - `index.html`: listener de `controllerchange` que recarga la página
+    UNA vez apenas el control cambia de manos.
+  - Por qué funciona sin que el usuario haga nada: el chequeo de
+    actualización del navegador para el script del service worker
+    (`flutter_service_worker.js`) pasa por afuera del propio service
+    worker (no lo puede interceptar), así que sí detecta el cambio de
+    contenido aunque el worker viejo siga sirviendo el resto de la app
+    cacheado. Una vez que lo detecta e instala el nuevo, `skipWaiting`
+    + `clients.claim()` lo hacen tomar control YA, sin esperar a que se
+    cierre la pestaña -- y el listener de `controllerchange` dispara el
+    único reload que hace falta para que esa carga, ahora sí, salga
+    fresca del servidor. De acá en más (con el worker nuevo ya
+    instalado en todos lados) no debería volver a pasar.
+  - Verificado local: build + contenedor real, `flutter_service_worker.js`
+    sirve el contenido esperado con `Cache-Control: no-cache`.
