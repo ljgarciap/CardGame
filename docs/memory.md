@@ -1131,3 +1131,42 @@ formal no aplica (rol no activado todavía en CardGame).
     capa de complejidad de layout (cartas "fantasma") que no se justificó
     para esta vuelta; el log de texto + flash de vida ya resuelve el
     reclamo concreto ("no sé quién le pegó a quién ni cuánto daño").
+
+- **Causa real de "sigo sin poder entrar desde el celu" encontrada -- los
+  dos fixes de service worker (`640c0ba`, `c088f66`) atacaban el mecanismo
+  equivocado.** Diagnóstico: Luis confirmó que siempre prueba por WiFi
+  (descarta proxy transparente de operador) y que en incógnito el login sí
+  carga (confirma que es caché del lado cliente, no un bug funcional).
+  Dos hallazgos:
+  - El deploy de prueba es HTTP plano sin dominio
+    (`http://2.25.79.64:8888`, ver 2026-07-19 (2) más arriba). Los service
+    workers solo corren en "secure contexts" (HTTPS o `localhost`) --
+    confirmado en el propio loader de Flutter (`flutter_bootstrap.js`
+    hace `if (!("serviceWorker" in navigator))` y aborta con "Service
+    Worker API unavailable" si no es secure context). Es decir: el código
+    de los dos commits anteriores (unregister, skipWaiting, clients.claim,
+    controllerchange) nunca se ejecutó en el celular de Luis -- no es que
+    el fix estuviera mal escrito, es que apuntaba a un mecanismo que no
+    corre en este deploy. Se deja igual en el Dockerfile/index.html
+    (inerte hoy, entra en juego solo cuando haya dominio + TLS reales para
+    producción).
+  - La causa real: antes de `b35e740` (2026-07-19, "no cachear el bundle
+    de Flutter web como immutable"), `main.dart.js` caía en el bucket
+    genérico de `nginx.conf` y se servía con `Cache-Control: public,
+    max-age=604800, immutable`. Cualquier celular que lo haya cargado en
+    esa ventana lo tiene cacheado como immutable por 7 días -- el
+    navegador ni siquiera vuelve a preguntarle al servidor en ese tiempo,
+    así que ningún fix posterior (headers nuevos, service worker) le podía
+    llegar. No hay forma de invalidar server-side una respuesta ya
+    cacheada por el navegador.
+  - Fix real (`frontend/Dockerfile`, `.github/workflows/deploy-vps.yml`):
+    `ARG BUILD_ID` (recicla el mismo sha corto que ya se usa como tag de
+    imagen) se hornea como query string en la URL de `main.dart.js`
+    (`mainJsPath` dentro de `flutter_bootstrap.js`) vía `sed` post-build.
+    Cada deploy pide una URL distinta -- un celular con caché envenenado
+    (incluso "immutable") nunca vio esa URL nueva, así que la pide fresca
+    en vez de depender de que la vieja se invalide. Verificado con build
+    Docker real + contenedor: `flutter_bootstrap.js` queda con
+    `"mainJsPath":"main.dart.js?v=<BUILD_ID>"` y nginx le sigue mandando
+    `Cache-Control: no-cache` a esa URL igual (el query string no afecta
+    el matching de la location por filename).

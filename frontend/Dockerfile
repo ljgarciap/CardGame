@@ -37,8 +37,37 @@ RUN flutter build web --release --pwa-strategy=none --dart-define=API_BASE_URL=$
 # de inmediato (skipWaiting + clients.claim) y no cachea nada -- combinado
 # con el listener de controllerchange en index.html, la transición pasa
 # sola en el próximo request sin que el usuario tenga que limpiar nada a
-# mano.
+# mano. Nota (2026-07-20): este deploy de prueba es HTTP plano sin dominio
+# (ver docker-compose.prod.yml) -- los service workers solo corren en
+# "secure contexts" (HTTPS o localhost), así que este mecanismo hoy es
+# inerte acá y solo entra en juego cuando haya dominio + TLS reales. La
+# causa real de "sigo sin poder entrar" resultó ser otra, ver el ARG
+# BUILD_ID más abajo.
 RUN printf "self.addEventListener('install', () => self.skipWaiting());\nself.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));\n" > /app/build/web/flutter_service_worker.js
+
+# Causa real confirmada 2026-07-20 (incógnito cargaba bien, perfil normal
+# no -- no era el service worker, ver nota arriba): antes de que
+# nginx.conf le pusiera "no-cache" a main.dart.js (commit b35e740),
+# este archivo caía en el bucket genérico de assets y se servía con
+# "Cache-Control: public, max-age=604800, immutable" -- cualquier
+# celular que lo haya cargado en esa ventana lo tiene cacheado como
+# immutable por 7 días: el navegador ni siquiera vuelve a preguntarle
+# al servidor en ese tiempo, así que ningún cambio de headers posterior
+# (ni el service worker) le llega. No hay forma de invalidar server-side
+# una respuesta ya cacheada -- la solución real es que la URL cambie en
+# cada deploy, para que un dispositivo con caché envenenado pida una URL
+# que nunca vio en vez de depender de que la vieja se invalide.
+ARG BUILD_ID=dev
+RUN sed -i "s/\"mainJsPath\":\"main.dart.js\"/\"mainJsPath\":\"main.dart.js?v=${BUILD_ID}\"/" /app/build/web/flutter_bootstrap.js
+
+# flutter_bootstrap.js mismo cae en el mismo bucket genérico pre-b35e740 --
+# un dispositivo con ESE archivo cacheado como immutable nunca vería el
+# sed de arriba, porque ni siquiera volvería a pedirlo. index.html no
+# quedó nunca immutable-cacheado (no matchea esa regex), así que
+# versionar acá la referencia sí le llega: fuerza a pedir un
+# flutter_bootstrap.js que el navegador nunca vio, en vez de depender de
+# que el viejo se invalide solo.
+RUN sed -i "s/src=\"flutter_bootstrap.js\"/src=\"flutter_bootstrap.js?v=${BUILD_ID}\"/" /app/build/web/index.html
 
 # ---- serve stage ----
 FROM nginx:alpine

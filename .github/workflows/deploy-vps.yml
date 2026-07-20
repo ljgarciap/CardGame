@@ -64,8 +64,13 @@ jobs:
           # frontend/lib/core/api_config.dart y frontend/Dockerfile. Tiene
           # que apuntar a donde el navegador del teléfono pueda llegar de
           # verdad (IP pública del VPS), no localhost.
+          # BUILD_ID: cache-busting de main.dart.js (ver frontend/Dockerfile,
+          # 2026-07-20) -- reusa el mismo sha corto que ya se usa como tag
+          # de imagen, para que cada deploy pida una URL nueva sin depender
+          # de que un caché viejo (incluso "immutable") se invalide solo.
           build-args: |
             API_BASE_URL=${{ vars.CARDGAME_API_BASE_URL }}
+            BUILD_ID=${{ steps.tag.outputs.tag }}
           tags: |
             ${{ env.FRONTEND_IMAGE }}:${{ steps.tag.outputs.tag }}
             ${{ env.FRONTEND_IMAGE }}:latest
