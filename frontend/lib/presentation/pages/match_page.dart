@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../domain/entities/attack_event.dart';
 import '../../domain/entities/match_state.dart';
 import '../providers/auth_provider.dart';
 import '../providers/match_provider.dart';
@@ -16,6 +17,14 @@ class MatchPage extends ConsumerStatefulWidget {
 
 class _MatchPageState extends ConsumerState<MatchPage> {
   String? _selectedAttackerId;
+
+  /// Texto del último ataque resuelto, mostrado unos segundos -- sin esto
+  /// no hay ninguna señal visual de "quién le pegó a quién" más allá del
+  /// número de vida cambiando solo, que además puede pasar desapercibido
+  /// (ver docs/memory.md 2026-07-20).
+  String? _combatLogText;
+  bool _flashYourLife = false;
+  bool _flashOpponentLife = false;
 
   void _selectAttacker(CardInPlayEntity card, bool yourTurn) {
     if (!yourTurn) return;
@@ -104,6 +113,49 @@ class _MatchPageState extends ConsumerState<MatchPage> {
     if (mounted) Navigator.of(context).pop();
   }
 
+  String _describeEvent(AttackEventEntity event, bool iAttacked) {
+    if (event.isFaceAttack) {
+      final target = iAttacked ? 'la vida rival' : 'tu vida';
+      return '${event.attackerName} ataca directo a $target (-${event.damage})';
+    }
+    final suffix = event.targetDefeated ? ' ¡destruida!' : '';
+    return '${event.attackerName} ataca a ${event.targetName ?? 'una carta'} (-${event.damage})$suffix';
+  }
+
+  /// Muestra cada ataque del batch en secuencia (el bot puede atacar con
+  /// varias cartas en un mismo turno) antes de aplicar el resultado final
+  /// visualmente ya asentado — si el batch cierra la partida, el diálogo de
+  /// resultado se muestra recién después de terminar de animar, para que no
+  /// tape el golpe que la decidió.
+  Future<void> _playEventSequence(List<AttackEventEntity> events, {MatchUiState? showResultAfter}) async {
+    final myId = ref.read(authNotifierProvider).user?.id;
+    for (final event in events) {
+      if (!mounted) return;
+      final iAttacked = event.attackingPlayerId == myId;
+      setState(() {
+        _combatLogText = _describeEvent(event, iAttacked);
+        if (event.isFaceAttack) {
+          if (iAttacked) {
+            _flashOpponentLife = true;
+          } else {
+            _flashYourLife = true;
+          }
+        }
+      });
+      await Future.delayed(const Duration(milliseconds: 900));
+      if (!mounted) return;
+      setState(() {
+        _flashYourLife = false;
+        _flashOpponentLife = false;
+      });
+    }
+    if (!mounted) return;
+    setState(() => _combatLogText = null);
+    if (showResultAfter != null) {
+      _showResultDialog(showResultAfter);
+    }
+  }
+
   void _showResultDialog(MatchUiState uiState) {
     final myId = ref.read(authNotifierProvider).user?.id;
     final won = uiState.winnerUserId != null && uiState.winnerUserId == myId;
@@ -171,7 +223,14 @@ class _MatchPageState extends ConsumerState<MatchPage> {
           SnackBar(content: Text(next.errorMessage!), backgroundColor: Colors.redAccent),
         );
       }
-      if (next.phase == MatchPhase.over && previous?.phase != MatchPhase.over) {
+      final newEventBatch =
+          next.eventBatchNonce != previous?.eventBatchNonce && next.pendingEvents.isNotEmpty;
+      if (newEventBatch) {
+        _playEventSequence(
+          next.pendingEvents,
+          showResultAfter: next.phase == MatchPhase.over ? next : null,
+        );
+      } else if (next.phase == MatchPhase.over && previous?.phase != MatchPhase.over) {
         _showResultDialog(next);
       }
       if (next.phase == MatchPhase.fatalError && previous?.phase != MatchPhase.fatalError) {
@@ -228,6 +287,7 @@ class _MatchPageState extends ConsumerState<MatchPage> {
         ),
         const Divider(color: Colors.white12, height: 24),
         _turnBanner(state),
+        _combatLog(),
         const Spacer(),
         _cardRow(
           state.yourBoard,
@@ -248,6 +308,53 @@ class _MatchPageState extends ConsumerState<MatchPage> {
     );
   }
 
+  Widget _combatLog() {
+    final text = _combatLogText;
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 200),
+      child: text == null
+          ? const SizedBox(height: 28)
+          : Padding(
+              key: ValueKey(text),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Text(
+                text,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.amberAccent,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ).animate().fadeIn(duration: 150.ms),
+            ),
+    );
+  }
+
+  Widget _lifePill({required int life, required bool flashing, required VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: flashing
+              ? Colors.redAccent.withValues(alpha: 0.6)
+              : (onTap != null ? Colors.redAccent.withValues(alpha: 0.25) : Colors.black26),
+          borderRadius: BorderRadius.circular(20),
+          border: onTap != null ? Border.all(color: Colors.redAccent, width: 2) : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.favorite, color: Colors.redAccent, size: 16),
+            const SizedBox(width: 6),
+            Text('$life', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _opponentInfo(MatchStateEntity state, String? opponentUsername, bool targeting) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -262,24 +369,10 @@ class _MatchPageState extends ConsumerState<MatchPage> {
           const SizedBox(width: 12),
           Text('Mano: ${state.opponentHandCount}', style: const TextStyle(color: Colors.white38, fontSize: 12)),
           const SizedBox(width: 16),
-          GestureDetector(
+          _lifePill(
+            life: state.opponentLife,
+            flashing: _flashOpponentLife,
             onTap: targeting ? _attackFace : null,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: targeting ? Colors.redAccent.withValues(alpha: 0.25) : Colors.black26,
-                borderRadius: BorderRadius.circular(20),
-                border: targeting ? Border.all(color: Colors.redAccent, width: 2) : null,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.favorite, color: Colors.redAccent, size: 16),
-                  const SizedBox(width: 6),
-                  Text('${state.opponentLife}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ),
           ),
         ],
       ),
@@ -291,9 +384,7 @@ class _MatchPageState extends ConsumerState<MatchPage> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          const Icon(Icons.favorite, color: Colors.redAccent, size: 16),
-          const SizedBox(width: 6),
-          Text('${state.yourLife}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          _lifePill(life: state.yourLife, flashing: _flashYourLife, onTap: null),
           const Spacer(),
           Text('Mazo: ${state.yourDeckCount}', style: const TextStyle(color: Colors.white38, fontSize: 12)),
           const SizedBox(width: 16),

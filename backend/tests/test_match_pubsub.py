@@ -4,8 +4,8 @@ import uuid
 import pytest
 
 from app.models.enums import Faction, Rank, Rarity
-from app.services.match_engine import CardInPlay, Match, MatchPlayerState
-from app.services.match_pubsub import consume, listen, publish_match_update, subscribe
+from app.services.match_engine import AttackEvent, CardInPlay, Match, MatchPlayerState
+from app.services.match_pubsub import MatchUpdate, consume, listen, publish_match_update, subscribe
 
 
 def _make_match() -> Match:
@@ -30,17 +30,28 @@ def _make_match() -> Match:
     )
 
 
+def _make_attack_event(match: Match) -> AttackEvent:
+    attacker = match.players[match.turn_order[0]].board[0]
+    return AttackEvent(
+        attacking_player_id=match.turn_order[0],
+        attacker_id=attacker.player_card_id,
+        attacker_name=attacker.name,
+        target="face",
+        damage=attacker.attack,
+    )
+
+
 @pytest.mark.asyncio
 async def test_subscriber_receives_published_match_update():
     """Simula 2 workers: uno se suscribe (como si tuviera la conexión
     WebSocket del rival) y otro publica (como si acabara de procesar una
     acción) — sobre Redis real, no un mock en memoria."""
     match = _make_match()
-    received: list[Match] = []
+    received: list[MatchUpdate] = []
 
     async def consumer():
-        async for received_match in listen(match.id):
-            received.append(received_match)
+        async for update in listen(match.id):
+            received.append(update)
             return  # solo nos interesa el primer mensaje real
 
     async def publisher():
@@ -50,19 +61,41 @@ async def test_subscriber_receives_published_match_update():
     await asyncio.wait_for(asyncio.gather(consumer(), publisher()), timeout=5)
 
     assert len(received) == 1
-    assert received[0].id == match.id
-    assert received[0].players[match.turn_order[0]].board[0].name == "Zeus, King of Olympus"
+    assert received[0].match.id == match.id
+    assert received[0].match.players[match.turn_order[0]].board[0].name == "Zeus, King of Olympus"
+    assert received[0].events == []
+
+
+@pytest.mark.asyncio
+async def test_published_attack_events_arrive_in_order():
+    match = _make_match()
+    event = _make_attack_event(match)
+    received: list[MatchUpdate] = []
+
+    async def consumer():
+        async for update in listen(match.id):
+            received.append(update)
+            return
+
+    async def publisher():
+        await asyncio.sleep(0.2)
+        await publish_match_update(match, [event])
+
+    await asyncio.wait_for(asyncio.gather(consumer(), publisher()), timeout=5)
+
+    assert len(received) == 1
+    assert received[0].events == [event]
 
 
 @pytest.mark.asyncio
 async def test_subscribers_do_not_receive_updates_from_other_matches():
     match_a = _make_match()
     match_b = _make_match()
-    received: list[Match] = []
+    received: list[MatchUpdate] = []
 
     async def consumer():
-        async for received_match in listen(match_a.id):
-            received.append(received_match)
+        async for update in listen(match_a.id):
+            received.append(update)
             return
 
     async def publisher():
@@ -74,7 +107,7 @@ async def test_subscribers_do_not_receive_updates_from_other_matches():
     await asyncio.wait_for(asyncio.gather(consumer(), publisher()), timeout=5)
 
     assert len(received) == 1
-    assert received[0].id == match_a.id
+    assert received[0].match.id == match_a.id
 
 
 @pytest.mark.asyncio
@@ -94,12 +127,12 @@ async def test_subscribe_then_consume_is_the_pattern_match_ws_actually_uses():
     await publish_match_update(match)
 
     received = None
-    async for received_match in consume(pubsub):
-        received = received_match
+    async for update in consume(pubsub):
+        received = update
         break
 
     assert received is not None
-    assert received.id == match.id
+    assert received.match.id == match.id
 
 
 @pytest.mark.asyncio
@@ -108,17 +141,17 @@ async def test_multiple_subscribers_all_receive_the_same_update():
     distinto de la MISMA partida, ambos suscriptos al mismo canal — los dos
     tienen que recibir el mismo estado publicado."""
     match = _make_match()
-    received_by_worker_a: list[Match] = []
-    received_by_worker_b: list[Match] = []
+    received_by_worker_a: list[MatchUpdate] = []
+    received_by_worker_b: list[MatchUpdate] = []
 
     async def worker_a():
-        async for received_match in listen(match.id):
-            received_by_worker_a.append(received_match)
+        async for update in listen(match.id):
+            received_by_worker_a.append(update)
             return
 
     async def worker_b():
-        async for received_match in listen(match.id):
-            received_by_worker_b.append(received_match)
+        async for update in listen(match.id):
+            received_by_worker_b.append(update)
             return
 
     async def publisher():
@@ -129,4 +162,4 @@ async def test_multiple_subscribers_all_receive_the_same_update():
 
     assert len(received_by_worker_a) == 1
     assert len(received_by_worker_b) == 1
-    assert received_by_worker_a[0].id == received_by_worker_b[0].id == match.id
+    assert received_by_worker_a[0].match.id == received_by_worker_b[0].match.id == match.id

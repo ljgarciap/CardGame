@@ -25,6 +25,7 @@ from app.services.card_ownership import load_owned_cards
 from app.services.combat_balance import get_or_create_combat_balance_config
 from app.services.match_engine import (
     DECK_SIZE,
+    AttackEvent,
     CardInPlay,
     MatchRuleViolation,
     attack,
@@ -200,10 +201,25 @@ async def _handle_start_bot_match(user: User, raw_deck: list, websocket: WebSock
     )
 
 
+def _attack_event_json(event: AttackEvent) -> dict:
+    return {
+        "type": "attack_event",
+        "attacking_player_id": str(event.attacking_player_id),
+        "attacker_id": str(event.attacker_id),
+        "attacker_name": event.attacker_name,
+        "target": "face" if event.target == "face" else {"card_id": str(event.target)},
+        "target_name": event.target_name,
+        "damage": event.damage,
+        "target_defeated": event.target_defeated,
+    }
+
+
 async def _handle_match_action(user_id: UUID, action: str, raw: dict) -> None:
     match_id = _local_match_ids.get(user_id)
     if match_id is None:
         raise MatchRuleViolation("no estás en ninguna partida")
+
+    events: list[AttackEvent] = []
 
     async with match_store.match_lock(match_id):
         match = await match_store.load_match(match_id)
@@ -215,7 +231,7 @@ async def _handle_match_action(user_id: UUID, action: str, raw: dict) -> None:
         elif action == "attack":
             target = raw["target"]
             target_value = "face" if target == "face" else uuid.UUID(str(target["card_id"]))
-            attack(match, user_id, uuid.UUID(str(raw["attacker_id"])), target_value)
+            events.append(attack(match, user_id, uuid.UUID(str(raw["attacker_id"])), target_value))
         elif action == "end_turn":
             end_turn(match, user_id)
             # Si el rival es el bot de práctica, le toca jugar su turno
@@ -223,17 +239,21 @@ async def _handle_match_action(user_id: UUID, action: str, raw: dict) -> None:
             # match_engine que un humano, así que el save/publish de más
             # abajo ya cubre difundir el resultado, no hace falta repetirlo.
             if not match.is_over and bot.is_bot_turn(match):
-                bot.run_bot_turn(match)
+                events.extend(bot.run_bot_turn(match))
         elif action == "forfeit":
             forfeit(match, user_id)
 
         await match_store.save_match(match)
 
-    await match_pubsub.publish_match_update(match)
+    await match_pubsub.publish_match_update(match, events)
 
 
 async def _forward_match_events(user_id: UUID, match_pubsub_conn, websocket: WebSocket) -> None:
-    async for match in match_pubsub.consume(match_pubsub_conn):
+    async for update in match_pubsub.consume(match_pubsub_conn):
+        match = update.match
+        for event in update.events:
+            await websocket.send_json(_attack_event_json(event))
+
         if match.is_over:
             await websocket.send_json(
                 {

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/errors/api_exception.dart';
 import '../../data/repositories/match_repository_impl.dart';
+import '../../domain/entities/attack_event.dart';
 import '../../domain/entities/match_state.dart';
 import '../../domain/repositories/match_repository.dart';
 
@@ -24,6 +25,19 @@ class MatchUiState {
   /// `errorMessage`, y el segundo aviso nunca se muestra.
   final int errorNonce;
 
+  /// Ataques resueltos que llegaron junto con el `state_update`/`match_over`
+  /// más reciente — MatchPage los consume para animarlos en secuencia. Se
+  /// mandan agrupados con el nuevo estado (no apenas llega cada
+  /// `attack_event`) para que la UI pueda decidir sola cuándo mostrar el
+  /// resultado final, después de la animación, en vez de que el tablero
+  /// salte instantáneamente por delante de la animación.
+  final List<AttackEventEntity> pendingEvents;
+
+  /// Mismo motivo que `errorNonce`: un batch nuevo de eventos vacío (ej.
+  /// jugar una carta, sin ataques) igual tiene que poder distinguirse del
+  /// batch anterior si por casualidad también estaba vacío.
+  final int eventBatchNonce;
+
   const MatchUiState({
     this.phase = MatchPhase.idle,
     this.opponentUsername,
@@ -32,6 +46,8 @@ class MatchUiState {
     this.matchOverReason,
     this.errorMessage,
     this.errorNonce = 0,
+    this.pendingEvents = const [],
+    this.eventBatchNonce = 0,
   });
 
   /// `errorMessage` es intencionalmente el único campo que SIEMPRE se
@@ -48,6 +64,8 @@ class MatchUiState {
     String? matchOverReason,
     String? errorMessage,
     int? errorNonce,
+    List<AttackEventEntity>? pendingEvents,
+    int? eventBatchNonce,
   }) {
     return MatchUiState(
       phase: phase ?? this.phase,
@@ -57,6 +75,8 @@ class MatchUiState {
       matchOverReason: matchOverReason ?? this.matchOverReason,
       errorMessage: errorMessage,
       errorNonce: errorNonce ?? this.errorNonce,
+      pendingEvents: pendingEvents ?? this.pendingEvents,
+      eventBatchNonce: eventBatchNonce ?? this.eventBatchNonce,
     );
   }
 }
@@ -65,6 +85,11 @@ final matchRepositoryProvider = Provider<MatchRepository>((ref) => MatchReposito
 
 class MatchNotifier extends Notifier<MatchUiState> {
   StreamSubscription<Map<String, dynamic>>? _subscription;
+
+  /// Ataques ya llegados pero todavía no adjuntados a un state_update/
+  /// match_over -- el protocolo manda cada attack_event como su propio
+  /// mensaje, en orden, antes del snapshot que ya refleja el resultado.
+  final List<AttackEventEntity> _bufferedEvents = [];
 
   @override
   MatchUiState build() {
@@ -137,10 +162,15 @@ class MatchNotifier extends Notifier<MatchUiState> {
             opponentUsername: message['opponent_username'] as String,
           );
           break;
+        case 'attack_event':
+          _bufferedEvents.add(AttackEventEntity.fromJson(message));
+          break;
         case 'state_update':
           state = state.copyWith(
             phase: MatchPhase.inProgress,
             state: MatchStateEntity.fromJson(message['state'] as Map<String, dynamic>),
+            pendingEvents: _drainBufferedEvents(),
+            eventBatchNonce: state.eventBatchNonce + 1,
           );
           break;
         case 'match_over':
@@ -148,6 +178,8 @@ class MatchNotifier extends Notifier<MatchUiState> {
             phase: MatchPhase.over,
             winnerUserId: message['winner_user_id'] as String?,
             matchOverReason: message['reason'] as String?,
+            pendingEvents: _drainBufferedEvents(),
+            eventBatchNonce: state.eventBatchNonce + 1,
           );
           break;
         case 'error':
@@ -160,6 +192,12 @@ class MatchNotifier extends Notifier<MatchUiState> {
     } catch (_) {
       _fail('Se recibió un mensaje inválido del servidor.');
     }
+  }
+
+  List<AttackEventEntity> _drainBufferedEvents() {
+    final events = List<AttackEventEntity>.from(_bufferedEvents);
+    _bufferedEvents.clear();
+    return events;
   }
 
   void _fail(String message) {

@@ -21,6 +21,7 @@ from app.services.combat_balance import get_or_create_rank_base_stats
 from app.services.match_engine import (
     DECK_SIZE,
     MAX_BOARD_SIZE,
+    AttackEvent,
     CardInPlay,
     Match,
     attack,
@@ -63,17 +64,23 @@ def is_bot_turn(match: Match) -> bool:
     return match.turn_order[match.current_turn_index] == BOT_USER_ID
 
 
-def run_bot_turn(match: Match) -> Match:
+def run_bot_turn(match: Match) -> list[AttackEvent]:
     """Corre el turno completo del bot en una sola pasada: juega la carta
     de mayor ataque en mano si hay lugar, ataca priorizando trades
     favorables (matar una carta rival de un golpe, empezando por la más
     fuerte que pueda matar; si no hay ninguna, ataca directo), y termina
     turno. Una sola pasada alcanza porque el motor alterna estrictamente
-    entre 2 jugadores -- después de `end_turn` siempre le toca al humano."""
+    entre 2 jugadores -- después de `end_turn` siempre le toca al humano.
+
+    Devuelve los eventos de cada ataque resuelto, en orden -- el bot puede
+    atacar con varias cartas en el mismo turno, y el cliente necesita cada
+    golpe individual para animarlos en secuencia, no solo el resultado
+    final agregado."""
     if match.is_over or not is_bot_turn(match):
-        return match
+        return []
 
     bot = match.players[BOT_USER_ID]
+    events: list[AttackEvent] = []
 
     if not bot.has_played_card_this_turn and len(bot.board) < MAX_BOARD_SIZE and bot.hand:
         best_card = max(bot.hand, key=lambda c: c.attack)
@@ -88,11 +95,11 @@ def run_bot_turn(match: Match) -> Match:
         killable = [t for t in opponent.board if card.attack >= t.current_defense]
         if killable:
             target = max(killable, key=lambda t: t.attack)
-            attack(match, BOT_USER_ID, card.player_card_id, target.player_card_id)
+            events.append(attack(match, BOT_USER_ID, card.player_card_id, target.player_card_id))
         else:
-            attack(match, BOT_USER_ID, card.player_card_id, "face")
+            events.append(attack(match, BOT_USER_ID, card.player_card_id, "face"))
 
     if not match.is_over:
         end_turn(match, BOT_USER_ID)
 
-    return match
+    return events

@@ -137,4 +137,39 @@ void main() {
 
     expect(find.text('Chibchacum, the Punished'), findsNWidgets(2));
   });
+
+  testWidgets('un attack_event muestra el log de combate y después desaparece',
+      (tester) async {
+    final repository = await _pumpMatchPageWithState(tester, _stateJson(yourTurn: true));
+
+    repository.emit({
+      'type': 'attack_event',
+      'attacking_player_id': 'rival-id',
+      'attacker_id': 'card-1',
+      'attacker_name': 'Bachué, the Original Mother',
+      'target': 'face',
+      'target_name': null,
+      'damage': 6,
+      'target_defeated': false,
+    });
+    repository.emit({'type': 'state_update', 'state': _stateJson(yourTurn: true)});
+    await tester.pump();
+
+    expect(
+      find.text('Bachué, the Original Mother ataca directo a tu vida (-6)'),
+      findsOneWidget,
+    );
+
+    // El batch tarda 900ms por evento; después de eso el AnimatedSwitcher
+    // todavía necesita su propia transición de salida (200ms) antes de que
+    // el widget viejo salga del árbol -- dos pumps separados, no uno solo,
+    // para no chequear a mitad del fade-out.
+    await tester.pump(const Duration(milliseconds: 900));
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(
+      find.text('Bachué, the Original Mother ataca directo a tu vida (-6)'),
+      findsNothing,
+    );
+  });
 }

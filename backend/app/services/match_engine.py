@@ -67,6 +67,22 @@ class Match(BaseModel):
     reason: Optional[str] = None
 
 
+class AttackEvent(BaseModel):
+    """Resultado de un ataque resuelto — viaja junto al `state_update` para
+    que el cliente pueda animar "quién le pegó a quién" en vez de inferirlo
+    comparando snapshots (frágil: con varios ataques del bot en el mismo
+    turno, comparar solo el antes/después no dice el orden ni distingue
+    cada golpe individual)."""
+
+    attacking_player_id: UUID
+    attacker_id: UUID
+    attacker_name: str
+    target: Union[str, UUID]  # "face" o el player_card_id de la carta objetivo
+    target_name: Optional[str] = None  # None cuando target == "face"
+    damage: int
+    target_defeated: bool = False
+
+
 def _current_player_id(match: Match) -> UUID:
     return match.turn_order[match.current_turn_index]
 
@@ -173,7 +189,7 @@ def play_card(match: Match, user_id: UUID, player_card_id: UUID) -> Match:
 
 def attack(
     match: Match, user_id: UUID, attacker_id: UUID, target: Union[str, UUID]
-) -> Match:
+) -> AttackEvent:
     """target: el string "face", o el player_card_id de una carta rival."""
     _require_turn(match, user_id)
     player = match.players[user_id]
@@ -188,22 +204,40 @@ def attack(
     if attacker.has_attacked_this_turn:
         raise MatchRuleViolation("esa carta ya atacó este turno")
 
+    damage = attacker.attack
     if target == "face":
-        opponent.life = max(0, opponent.life - attacker.attack)
+        opponent.life = max(0, opponent.life - damage)
+        event = AttackEvent(
+            attacking_player_id=user_id,
+            attacker_id=attacker.player_card_id,
+            attacker_name=attacker.name,
+            target="face",
+            damage=damage,
+        )
     else:
         target_card = next((c for c in opponent.board if c.player_card_id == target), None)
         if target_card is None:
             raise MatchRuleViolation("esa carta no está en el tablero rival")
-        target_card.current_defense = max(0, target_card.current_defense - attacker.attack)
-        if target_card.current_defense == 0:
+        target_card.current_defense = max(0, target_card.current_defense - damage)
+        defeated = target_card.current_defense == 0
+        if defeated:
             opponent.board.remove(target_card)
+        event = AttackEvent(
+            attacking_player_id=user_id,
+            attacker_id=attacker.player_card_id,
+            attacker_name=attacker.name,
+            target=target_card.player_card_id,
+            target_name=target_card.name,
+            damage=damage,
+            target_defeated=defeated,
+        )
 
     attacker.has_attacked_this_turn = True
 
     if opponent.life <= 0:
         _end_match(match, winner_id=user_id, reason="life_zero")
 
-    return match
+    return event
 
 
 def end_turn(match: Match, user_id: UUID) -> Match:

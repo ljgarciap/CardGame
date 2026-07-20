@@ -1101,3 +1101,33 @@ formal no aplica (rol no activado todavía en CardGame).
     instalado en todos lados) no debería volver a pasar.
   - Verificado local: build + contenedor real, `flutter_service_worker.js`
     sirve el contenido esperado con `Cache-Control: no-cache`.
+- **Feedback visual de combate ("no hay animación, no se sabe quién atacó a
+  quién ni el daño")**: confirmado real (no era caché, Luis lo probó en
+  incógnito). Elegida la versión robusta (protocolo nuevo, no solo
+  frontend adivinando por diff de snapshots):
+  - `match_engine.py`: `attack()` ahora devuelve un `AttackEvent`
+    (atacante, objetivo, daño, si murió) en vez de `Match`. `bot.py`:
+    `run_bot_turn()` devuelve la lista de eventos de sus propios ataques
+    (puede atacar con varias cartas en un turno).
+  - `match_pubsub.py`: el canal ahora publica un `MatchUpdate` (match +
+    lista de eventos) en vez de solo `Match` -- cambio de contrato,
+    actualizados todos los callers y tests.
+  - `match_ws.py`: cada `AttackEvent` se manda como su propio mensaje WS
+    (`attack_event`) ANTES del `state_update`/`match_over` que ya refleja
+    el resultado -- el cliente recibe cada golpe individual, en orden,
+    no solo el estado final agregado.
+  - Frontend: `MatchNotifier` bufferea los `attack_event` que llegan y los
+    adjunta (`pendingEvents`) al próximo `state_update`/`match_over` --
+    así la animación puede jugar ANTES de que el tablero salte al
+    resultado ya asentado. `MatchPage` los anima en secuencia (900ms c/u):
+    texto de log de combate ("Bachué ataca a Tlaloc (-6) ¡destruida!") +
+    flash en la vida correspondiente para golpes directos. Si el batch
+    cierra la partida, el diálogo de victoria/derrota espera a que
+    termine la animación.
+  - Deliberadamente fuera de alcance por ahora: animación posicional
+    sobre la carta específica (mover el sprite, flash en el lugar exacto
+    del tablero) -- la carta atacante/objetivo puede ya no estar en la
+    lista para cuando se anima (si murió), y corregir eso agrega una
+    capa de complejidad de layout (cartas "fantasma") que no se justificó
+    para esta vuelta; el log de texto + flash de vida ya resuelve el
+    reclamo concreto ("no sé quién le pegó a quién ni cuánto daño").

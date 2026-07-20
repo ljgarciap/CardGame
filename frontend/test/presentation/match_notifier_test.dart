@@ -168,6 +168,93 @@ void main() {
     expect(secondNonce, isNot(firstNonce));
   });
 
+  test('attack_event se guarda en buffer, no aparece hasta el próximo state_update', () async {
+    await container.read(matchNotifierProvider.notifier).startQueue(['a']);
+    repository.emit({
+      'type': 'attack_event',
+      'attacking_player_id': 'u1',
+      'attacker_id': 'c1',
+      'attacker_name': 'Achilles',
+      'target': 'face',
+      'target_name': null,
+      'damage': 5,
+      'target_defeated': false,
+    });
+    await Future.delayed(Duration.zero);
+
+    expect(container.read(matchNotifierProvider).pendingEvents, isEmpty);
+  });
+
+  test('pendingEvents se adjuntan al próximo state_update, en orden', () async {
+    await container.read(matchNotifierProvider.notifier).startQueue(['a']);
+    Map<String, dynamic> event(String attacker) => {
+          'type': 'attack_event',
+          'attacking_player_id': 'u1',
+          'attacker_id': attacker,
+          'attacker_name': attacker,
+          'target': 'face',
+          'target_name': null,
+          'damage': 3,
+          'target_defeated': false,
+        };
+    repository.emit(event('c1'));
+    repository.emit(event('c2'));
+    await Future.delayed(Duration.zero);
+    repository.emit({'type': 'state_update', 'state': _minimalState()});
+    await Future.delayed(Duration.zero);
+
+    final state = container.read(matchNotifierProvider);
+    expect(state.pendingEvents, hasLength(2));
+    expect(state.pendingEvents[0].attackerId, 'c1');
+    expect(state.pendingEvents[1].attackerId, 'c2');
+  });
+
+  test('el batch de eventos se vacía para el próximo state_update', () async {
+    await container.read(matchNotifierProvider.notifier).startQueue(['a']);
+    repository.emit({
+      'type': 'attack_event',
+      'attacking_player_id': 'u1',
+      'attacker_id': 'c1',
+      'attacker_name': 'Achilles',
+      'target': 'face',
+      'target_name': null,
+      'damage': 5,
+      'target_defeated': false,
+    });
+    await Future.delayed(Duration.zero);
+    repository.emit({'type': 'state_update', 'state': _minimalState()});
+    await Future.delayed(Duration.zero);
+    final firstNonce = container.read(matchNotifierProvider).eventBatchNonce;
+
+    repository.emit({'type': 'state_update', 'state': _minimalState()});
+    await Future.delayed(Duration.zero);
+    final state = container.read(matchNotifierProvider);
+
+    expect(state.pendingEvents, isEmpty);
+    expect(state.eventBatchNonce, isNot(firstNonce));
+  });
+
+  test('match_over también arrastra los eventos pendientes', () async {
+    await container.read(matchNotifierProvider.notifier).startQueue(['a']);
+    repository.emit({
+      'type': 'attack_event',
+      'attacking_player_id': 'u1',
+      'attacker_id': 'c1',
+      'attacker_name': 'Achilles',
+      'target': 'face',
+      'target_name': null,
+      'damage': 20,
+      'target_defeated': false,
+    });
+    await Future.delayed(Duration.zero);
+    repository.emit({'type': 'match_over', 'winner_user_id': 'u1', 'reason': 'life_zero'});
+    await Future.delayed(Duration.zero);
+
+    final state = container.read(matchNotifierProvider);
+    expect(state.phase, MatchPhase.over);
+    expect(state.pendingEvents, hasLength(1));
+  });
+
   test('un mensaje con forma inesperada no crashea, pasa a fatalError', () async {
     await container.read(matchNotifierProvider.notifier).startQueue(['a']);
     repository.emit({'type': 'state_update', 'state': 'no-es-un-mapa'});

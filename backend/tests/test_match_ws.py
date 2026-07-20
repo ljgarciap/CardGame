@@ -118,6 +118,70 @@ def test_end_turn_broadcasts_updated_state_to_both_players(client, db_session):
         assert waiting_update["state"]["your_turn"] is True
 
 
+def test_attack_broadcasts_attack_event_before_state_update(client, db_session):
+    """El attack_event tiene que llegar ANTES del state_update que ya
+    refleja el resultado -- es lo que le permite al cliente animar "quién
+    le pegó a quién" en vez de solo ver el número de vida cambiar (ver
+    docs/memory.md 2026-07-20). Mazo con stats fijos (30/30, un solo
+    arquetipo) a propósito, para poder asserar valores exactos."""
+    user_a, deck_a = _make_player(db_session, username="gina_ws")
+    user_b, deck_b = _make_player(db_session, username="hugo_ws")
+
+    with client.websocket_connect(f"/ws/match?token={_token(user_a)}") as ws_a, \
+            client.websocket_connect(f"/ws/match?token={_token(user_b)}") as ws_b:
+        ws_a.send_json({"action": "queue", "deck": deck_a})
+        ws_a.receive_json()  # queued
+        ws_b.send_json({"action": "queue", "deck": deck_b})
+        ws_b.receive_json()  # queued
+
+        ws_a.receive_json()  # match_found
+        state_a = ws_a.receive_json()  # state_update
+        ws_b.receive_json()  # match_found
+        state_b = ws_b.receive_json()  # state_update
+
+        active_ws, active_state, waiting_ws, active_user = (
+            (ws_a, state_a, ws_b, user_a) if state_a["state"]["your_turn"] else (ws_b, state_b, ws_a, user_b)
+        )
+
+        # Turno 0: el activo juega una carta (queda con mareo) y termina.
+        card_id = active_state["state"]["your_hand"][0]["player_card_id"]
+        active_ws.send_json({"action": "play_card", "player_card_id": card_id})
+        active_ws.receive_json()  # state_update
+        waiting_ws.receive_json()  # state_update
+        active_ws.send_json({"action": "end_turn"})
+        active_ws.receive_json()  # state_update
+        waiting_ws.receive_json()  # state_update
+
+        # Turno 1: el rival no hace nada, termina directo.
+        waiting_ws.send_json({"action": "end_turn"})
+        waiting_ws.receive_json()  # state_update
+        active_ws.receive_json()  # state_update -- vuelve a ser el turno del primero
+
+        # Turno 2: la carta ya no tiene mareo -- ataca a la cara.
+        active_ws.send_json({"action": "attack", "attacker_id": card_id, "target": "face"})
+
+        for ws in (active_ws, waiting_ws):
+            event = ws.receive_json()
+            assert event["type"] == "attack_event"
+            assert event["attacker_id"] == card_id
+            assert event["attacker_name"] == "Achilles"
+            assert event["target"] == "face"
+            assert event["damage"] == 30
+            assert event["target_defeated"] is False
+
+        # 30 de daño contra los 20 de vida por default de
+        # combat_balance_config termina la partida de un golpe -- no es el
+        # escenario típico del balance real (ver docs/specs/game-gacha-engine.md),
+        # pero estas cartas de fixture (30/30 fijo, un solo arquetipo) están
+        # pensadas para poder asserar valores exactos del attack_event, no
+        # para simular una partida balanceada.
+        for ws in (active_ws, waiting_ws):
+            final = ws.receive_json()
+            assert final["type"] == "match_over"
+            assert final["winner_user_id"] == str(active_user.id)
+            assert final["reason"] == "life_zero"
+
+
 def test_action_out_of_turn_returns_error_only_to_sender(client, db_session):
     user_a, deck_a = _make_player(db_session, username="erin_ws")
     user_b, deck_b = _make_player(db_session, username="frank_ws")

@@ -184,7 +184,13 @@ def test_end_turn_against_bot_comes_back_to_the_human(client, db_session):
         ws.receive_json()  # state_update inicial
 
         ws.send_json({"action": "end_turn"})
+
+        # El bot puede atacar con varias cartas en su turno -- cada una
+        # manda su propio attack_event antes del snapshot final, hay que
+        # drenarlos para llegar al mensaje que de verdad cierra el turno.
         after_bot_turn = ws.receive_json()
+        while after_bot_turn["type"] == "attack_event":
+            after_bot_turn = ws.receive_json()
 
         # Con el balance actual (combat_balance_config, ver docs/memory.md
         # 2026-07-19) ninguna carta mata de un solo golpe, así que en la
