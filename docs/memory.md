@@ -1018,3 +1018,40 @@ formal no aplica (rol no activado todavía en CardGame).
   - Decisión de secuencia de Luis: resolver primero el bug de balance
     urgente de arriba (bloquea probar el juego hoy); Tríadas se retoma
     después con spec formal dedicada, no se mezcla con el fix urgente.
+
+## 2026-07-20
+
+- **El fix de caché de nginx (`Cache-Control: no-cache` en `main.dart.js`,
+  2026-07-19) no alcanzó** — Luis siguió viendo comportamiento viejo
+  después de ese fix (login roto en pantallas ya arregladas, etc.).
+  Causa real: el build de Flutter Web registra un **service worker**
+  (`flutter_service_worker.js`) por default (`--pwa-strategy=offline-first`),
+  que cachea el app shell en el Cache Storage del navegador — una capa
+  totalmente aparte de los headers HTTP. Un service worker ya instalado
+  puede seguir sirviendo la versión vieja sin siquiera tocar la red,
+  sin importar qué headers mande el servidor. Fix real: `frontend/Dockerfile`
+  agrega `--pwa-strategy=none` a `flutter build web` (esta app no necesita
+  soporte offline, prioridad es que cada carga sea siempre la versión
+  real del servidor) + `frontend/web/index.html` desregistra explícitamente
+  cualquier service worker ya instalado y limpia el Cache Storage al
+  cargar — necesario porque el flag nuevo no desinstala solo el que ya
+  estaba corriendo en dispositivos que ya habían abierto la app antes.
+- **Investigado "no ataca" jugando contra el bot** (reporte de Luis tras
+  el fix de balance): tracing directo del motor (`match_engine.py`,
+  sin pasar por WS/HTTP, cartas de stats fijos) confirma que
+  play_card/attack/end_turn y el mareo de invocación funcionan
+  correctamente. Reproducido también contra el bot real en el VPS
+  (usuarios de prueba jr/vero): con un mazo débil (mayoría Hero, base
+  ataque/defensa 2-3), el bot elimina la carta recién jugada del humano
+  en cada uno de sus turnos antes de que el humano llegue a atacar con
+  ella — el humano nunca ve una ventana de ataque propia. No es un bug
+  de la mecánica (las reglas se aplican bien), es una posible descompensación
+  de ritmo: el bot nunca pierde tempo porque el humano no logra
+  plantarse en el tablero. Pendiente decidir con Luis si esto es
+  aceptable (el mazo de prueba era débil a propósito) o si hace falta
+  suavizar la heurística del bot / el balance de rangos bajos.
+- Sigue pendiente confirmar en vivo, con el fix de service worker ya
+  desplegado, si "no hay animaciones de lucha ni muestra el daño" era
+  síntoma del caché viejo (build previo a la corrección de balance,
+  quizás aún mostrando los números de vida/ataque rotos) o un problema
+  de UI aparte — no se pudo reproducir directo (sin browser conectado).

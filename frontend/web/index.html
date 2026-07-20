@@ -33,6 +33,24 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
+  <script>
+    // Limpieza de una sola vez: builds anteriores registraban un service
+    // worker con cacheo agresivo (offline-first, default de Flutter web)
+    // que podía seguir sirviendo una versión vieja del bundle sin tocar la
+    // red, incluso con headers no-cache en el servidor -- ver
+    // docs/memory.md 2026-07-20. El build actual ya no registra ninguno
+    // (--pwa-strategy=none en el Dockerfile), pero un dispositivo que ya
+    // tenía el viejo instalado necesita este desregistro explícito; la
+    // sola ausencia de body en el build nuevo no lo desinstala solo.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        registrations.forEach((registration) => registration.unregister());
+      });
+    }
+    if ('caches' in window) {
+      caches.keys().then((names) => names.forEach((name) => caches.delete(name)));
+    }
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

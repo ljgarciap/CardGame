@@ -16,7 +16,15 @@ COPY . .
 # que un build local sin --build-arg no falle silenciosamente contra un
 # backend real.
 ARG API_BASE_URL=http://localhost:8001
-RUN flutter build web --release --dart-define=API_BASE_URL=${API_BASE_URL}
+# --pwa-strategy=none: el build por default registra un service worker que
+# cachea el app shell en el Cache Storage del navegador -- una capa de
+# caché totalmente aparte de los headers HTTP (nginx.conf ya sirve
+# main.dart.js con no-cache, pero el service worker igual puede servir la
+# versión vieja sin tocar la red). Encontrado en vivo: un fix ya desplegado
+# no le llegaba al celular pese al no-cache de nginx. Este juego no
+# necesita soporte offline -- prioridad es que cada carga sea siempre la
+# versión real del servidor, no cachear para uso sin conexión.
+RUN flutter build web --release --pwa-strategy=none --dart-define=API_BASE_URL=${API_BASE_URL}
 
 # ---- serve stage ----
 FROM nginx:alpine
